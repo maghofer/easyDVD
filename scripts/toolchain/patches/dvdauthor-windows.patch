@@ -1,0 +1,68 @@
+--- a/src/compat.c
++++ b/src/compat.c
+@@ -9,7 +9,9 @@
+ #include <errno.h>
+ #include <assert.h>
+ #include <locale.h>
++#ifdef HAVE_ICONV
+ #include <langinfo.h>
++#endif
+ 
+ /*
+     Useful string stuff
+--- a/src/compat.h
++++ b/src/compat.h
+@@ -252,3 +252,9 @@
+   );
+   /* parses colorstr and returns the resulting colour. Will abort the process
+     on any errors. */
++
++#ifdef _WIN32
++#include <direct.h>
++#define mkdir(path, mode) _mkdir(path)
++#define fsync _commit
++#endif
+--- a/src/subgen.c
++++ b/src/subgen.c
+@@ -33,7 +33,11 @@
+ #include <errno.h>
+ #include <fcntl.h>
+ 
++#ifdef _WIN32
++#include <winsock2.h>
++#else
+ #include <netinet/in.h>
++#endif
+ 
+ #include "common.h"
+ #include "conffile.h"
+--- a/src/subreader.c
++++ b/src/subreader.c
+@@ -1446,10 +1446,10 @@
+     const char *p;
+     char *q;
+ 
+-    bzero(current, sizeof(subtitle_elt));
+-    bzero(line1, LINE_LEN);
+-    bzero(line2, LINE_LEN);
+-    bzero(directive, LINE_LEN);
++    memset(current, 0, sizeof(subtitle_elt));
++    memset(line1, 0, LINE_LEN);
++    memset(line2, 0, LINE_LEN);
++    memset(directive, 0, LINE_LEN);
+     while (!current->text[0])
+       {
+         if (!sub_fgets(line1, LINE_LEN))
+--- a/src/subgen-parse-xml.c
++++ b/src/subgen-parse-xml.c
+@@ -271,6 +271,10 @@
+ 
+ static void textsub_begin()
+   {
++#ifndef HAVE_FREETYPE
++    fprintf(stderr, "ERR: this easyDVD spumux build supports PNG subpictures only; text subtitles are disabled.\n");
++    exit(1);
++#endif
+     if (had_spu)
+       {
+         fprintf(stderr, "ERR:  cannot have both <spu> and <textsub>\n");

@@ -1,0 +1,23 @@
+.tools/
+bin/
+dist/
+.scratch/
+*.test
+*.log
+coverage.out
+# Workstation instructions and private asset experiments stay local.
+/AGENTS.md
+/validation/LOCAL-BACKGROUNDS.md
+/output/
+*.syso
+*.iso
+*.exe
+*.zip
+*.7z
+.env
+.env.*
+*.pem
+*.key
+*.db
+*.db-shm
+*.db-wal

@@ -1,0 +1,175 @@
+{
+  "reviewDate": "2026-10-28",
+  "status": "incomplete-for-bundled-redistribution",
+  "supplier": "DVDStyler 3.2.1 Windows x64 installer",
+  "supplierSha256": "99b74055e9b5cceae29b153158563e454905531c966f3cdbe98ea390a6a0e713",
+  "supplierSourceSha256": "0bb3348739f4c93097454b814ecb3a58f6bace8f030f41619a9feeafb4747558",
+  "components": [
+    {
+      "binary": "dvdauthor.exe",
+      "binarySha256": "01d9351e8ac01b35cb28ddca4a7930da29003614f5121384a6f5dd07e268459c",
+      "project": "dvdauthor",
+      "version": "0.7.2",
+      "license": "GPL-2.0-or-later",
+      "sourceCandidate": "dvdauthor-0.7.2.tar.gz",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "KERNEL32.dll",
+        "msvcrt.dll",
+        "USER32.dll",
+        "libxml2-2.dll"
+      ]
+    },
+    {
+      "binary": "libfontconfig-1.dll",
+      "binarySha256": "0be0eed4a8b1d0b2592c48287052bac4d473d8deb87fed0b70ec74efd62f994d",
+      "project": "fontconfig",
+      "version": "2.10.2",
+      "license": "MIT-style fontconfig license",
+      "sourceCandidate": "fontconfig-2.10.2.tar.bz2",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "libfreetype-6.dll",
+        "libxml2-2.dll",
+        "KERNEL32.dll",
+        "msvcrt.dll",
+        "msvcrt.dll",
+        "USER32.dll"
+      ]
+    },
+    {
+      "binary": "libfreetype-6.dll",
+      "binarySha256": "c7224ca7fefec36d16589fc35a83501596987dd27e670458ae74242f98ca5d86",
+      "project": "FreeType",
+      "version": "2.4.11",
+      "license": "FTL or GPL-2.0-or-later; selection must match the linked combination",
+      "sourceCandidate": "freetype-2.4.11.tar.bz2",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "zlib1.dll",
+        "KERNEL32.dll",
+        "msvcrt.dll"
+      ]
+    },
+    {
+      "binary": "libfribidi-0.dll",
+      "binarySha256": "36116604ba6b41bdc1ef8ed0257e75a5bdc08e335010314036e28434ac489fba",
+      "project": "GNU FriBidi",
+      "version": "0.19.6",
+      "license": "LGPL-2.1-or-later",
+      "sourceCandidate": "fribidi-0.19.6.tar.bz2",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "KERNEL32.dll",
+        "msvcrt.dll"
+      ]
+    },
+    {
+      "binary": "libiconv-2.dll",
+      "binarySha256": "954b8740a7cbe3728b136d4f36229c599d1f51534137b16e48e3d7ff9c468fdc",
+      "project": "GNU libiconv",
+      "version": "1.13.1",
+      "license": "LGPL-2.0-or-later for the library",
+      "sourceCandidate": "libiconv-1.13.1.tar.gz",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "KERNEL32.dll",
+        "msvcrt.dll",
+        "msvcrt.dll"
+      ]
+    },
+    {
+      "binary": "liblzma-5.dll",
+      "binarySha256": "ce34910b43d5e4285aecda0e4f64a1ba06c5d53e484f0b68d219c8d8473332ab",
+      "project": "XZ Utils liblzma",
+      "version": "5.0.4",
+      "license": "Public domain library; other archive files have other terms",
+      "sourceCandidate": "xz-5.0.4.tar.bz2",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "KERNEL32.dll",
+        "msvcrt.dll"
+      ]
+    },
+    {
+      "binary": "libpng14-14.dll",
+      "binarySha256": "28e614df9356cb667c8dd4cac11f90aa6be53094e3b4d61cbebf9dce30856c8e",
+      "project": "libpng",
+      "version": "1.4.0",
+      "license": "libpng license",
+      "sourceCandidate": "libpng-1.4.0.tar.bz2",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "zlib1.dll",
+        "KERNEL32.dll",
+        "msvcrt.dll",
+        "USER32.dll"
+      ]
+    },
+    {
+      "binary": "libxml2-2.dll",
+      "binarySha256": "2162fd773dafbb41eb422418761eade228321ab0790040646028c5f4f867ee42",
+      "project": "libxml2",
+      "version": "2.8.0",
+      "license": "MIT-style with additional file notices",
+      "sourceCandidate": "libxml2-2.8.0.tar.xz",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "libiconv-2.dll",
+        "liblzma-5.dll",
+        "zlib1.dll",
+        "KERNEL32.dll",
+        "msvcrt.dll",
+        "msvcrt.dll",
+        "WS2_32.dll"
+      ]
+    },
+    {
+      "binary": "mkisofs.exe",
+      "binarySha256": "cbb635d157f0959889fb8212e46ea64554ec2e8c9d3ccf9b88523f618062551a",
+      "project": "cdrtools / bootcd.ru",
+      "version": "2.01-bootcd.ru",
+      "license": "GPL-2.0-or-later",
+      "sourceCandidate": "cdrtools-2.01-bootcd.ru-src.zip",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "KERNEL32.dll",
+        "msvcrt.dll",
+        "msvcrt.dll"
+      ]
+    },
+    {
+      "binary": "spumux.exe",
+      "binarySha256": "189a2badefa06bc62c13137bbf1b64d24f4d9c944ccca0719df3c2c94d15e1c1",
+      "project": "dvdauthor",
+      "version": "0.7.2",
+      "license": "GPL-2.0-or-later",
+      "sourceCandidate": "dvdauthor-0.7.2.tar.gz",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "libfontconfig-1.dll",
+        "libfreetype-6.dll",
+        "libfribidi-0.dll",
+        "KERNEL32.dll",
+        "msvcrt.dll",
+        "libpng14-14.dll",
+        "USER32.dll",
+        "WS2_32.dll",
+        "libxml2-2.dll"
+      ]
+    },
+    {
+      "binary": "zlib1.dll",
+      "binarySha256": "2d663d66c1cf36a6836831a8ce9e0cdc66815f2b7ddcff4c9e81004d6c4b3992",
+      "project": "zlib",
+      "version": "1.2.8",
+      "license": "Zlib",
+      "sourceCandidate": "zlib-1.2.8.tar.gz",
+      "sourceMatchStatus": "version-matched candidate; supplier patches and build recipe not established",
+      "imports": [
+        "KERNEL32.dll",
+        "msvcrt.dll"
+      ]
+    }
+  ]
+}

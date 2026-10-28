@@ -1,0 +1,31 @@
+name: Test and build
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.27.3'
+      - run: go test -tags ci ./...
+      - run: go vet -tags ci ./...
+      - name: Audit publishable source
+        shell: pwsh
+        run: ./scripts/audit-source.ps1
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .tools/authoring
+          key: ${{ runner.os }}-authoring-${{ hashFiles('scripts/toolchain/**', 'scripts/build-authoring.ps1', 'scripts/tools.lock.json') }}
+      - name: Prepare pinned development and media tools
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1
+      - name: Build and validate DVD pipeline
+        shell: pwsh
+        run: ./scripts/build.ps1 -Test -Integration

@@ -1,0 +1,45 @@
+name: Build preview packages
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: .tools/authoring
+          key: ${{ runner.os }}-authoring-${{ hashFiles('scripts/toolchain/**', 'scripts/build-authoring.ps1', 'scripts/tools.lock.json') }}
+      - name: Check source and tag version
+        shell: pwsh
+        run: |
+          ./scripts/audit-source.ps1
+          $version = (Get-Content VERSION -Raw).Trim()
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") {
+            throw 'The selected tag must match VERSION.'
+          }
+      - name: Prepare pinned tools
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1
+      - name: Validate DVD pipeline
+        shell: pwsh
+        run: ./scripts/build.ps1 -Test -Integration
+      - name: Build portable and source packages
+        shell: pwsh
+        run: |
+          ./scripts/package.ps1 -PublicRelease
+          Get-ChildItem dist/*.zip | ForEach-Object {
+            $hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $($_.Name)" | Set-Content -LiteralPath "$($_.FullName).sha256" -Encoding utf8
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: easyDVD-preview-packages
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          retention-days: 14

@@ -1,0 +1,15 @@
+{
+  "kind": "synthetic harness smoke test",
+  "source": "FFmpeg testsrc2 720x576 PAL, 2 seconds, progressive 4:3",
+  "reference_sha256": "be1b9237e45285f40626b43db7f935ed07cfbb1b50142eb2596403ffc8205dee",
+  "encoder": "FFmpeg 9.0.2 software MPEG-2",
+  "production_profile": "two-pass 8 Mbps average / 9 Mbps peak",
+  "seconds": 0.155875,
+  "elementary_video_bytes": 1317242,
+  "psnr": "50.649228",
+  "ssim": "0.997788",
+  "dvd_authoring": "authored",
+  "mpeg2enc": "not available in this environment",
+  "hcenc": "not available in this environment",
+  "conclusion": "Harness validation only. Representative film samples and optional encoders are required before ranking quality."
+}
