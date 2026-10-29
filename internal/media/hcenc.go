@@ -4,6 +4,7 @@ import (
 	"context"
 	"debug/pe"
 	"easydvd/internal/model"
+	"easydvd/internal/platform"
 	"easydvd/internal/process"
 	"fmt"
 	"io"
@@ -156,7 +157,12 @@ func (t Tools) encodeHCenc(ctx context.Context, v model.Video, s model.Settings,
 	if progress != nil {
 		progress(.25)
 	}
-	err = process.Run(ctx, filepath.Join(t.HCencFolder(s), "HCenc_028.exe"), []string{"-ini", "HC.ini"}, process.Options{Dir: dir, Log: log, Stdout: log})
+	toolDir, cleanup, err := platform.LegacyWorkingDir(dir)
+	if err != nil {
+		return err
+	}
+	defer cleanup()
+	err = process.Run(ctx, filepath.Join(t.HCencFolder(s), "HCenc_028.exe"), []string{"-ini", "HC.ini"}, process.Options{Dir: toolDir, Log: log, Stdout: log})
 	// HCenc can return success after an input/configuration error. Require its
 	// elementary stream as well as successful decode/metadata validation below.
 	hcLog, _ := os.ReadFile(filepath.Join(dir, "hcenc.log"))

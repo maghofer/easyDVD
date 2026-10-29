@@ -15,13 +15,20 @@ import (
 
 var cropPattern = regexp.MustCompile(`crop=(-?\d+):(-?\d+):(-?\d+):(-?\d+)`)
 
+const PillarboxVersion = 2
+
 // pillarboxEvidence keeps the union of visible content over the entire video.
 // A single wider frame prevents cropping. Letterbox bars are never removed.
 type pillarboxEvidence struct {
-	width, height, border int
-	frames, visible       int
-	safe                  bool
-	pending               string
+	width, height, border  int
+	tolerance, left, right int
+	frames, visible        int
+	safe                   bool
+	pending                string
+}
+
+func (p *pillarboxEvidence) crops() (int, int) {
+	return min(p.border, p.left) / 2 * 2, min(p.border, p.width-p.right) / 2 * 2
 }
 
 func (p *pillarboxEvidence) Write(data []byte) (int, error) {
@@ -47,7 +54,12 @@ func (p *pillarboxEvidence) Write(data []byte) (int, error) {
 			continue
 		}
 		p.visible++
-		if x < p.border || x+w > p.width-p.border {
+		if p.visible == 1 {
+			p.left, p.right = x, x+w
+		} else {
+			p.left, p.right = min(p.left, x), max(p.right, x+w)
+		}
+		if x < p.border-p.tolerance || x+w > p.width-p.border+p.tolerance {
 			p.safe = false
 		}
 	}
@@ -55,9 +67,11 @@ func (p *pillarboxEvidence) Write(data []byte) (int, error) {
 }
 
 func (t Tools) DetectPillarbox(ctx context.Context, v model.Video, input string, log io.Writer) (model.Video, error) {
-	if v.CropChecked {
+	if v.CropChecked && v.CropVersion == PillarboxVersion {
 		return v, nil
 	}
+	v.CropLeft, v.CropRight = 0, 0
+	v.CropVersion = PillarboxVersion
 	// Narrow scope: only a 16:9 container containing a centered 4:3 image.
 	if math.Abs(v.DAR-16.0/9) > .025 || v.Width <= 0 || v.Height <= 0 {
 		v.CropChecked = true
@@ -68,7 +82,7 @@ func (t Tools) DetectPillarbox(ctx context.Context, v model.Video, input string,
 		v.CropChecked = true
 		return v, nil
 	}
-	evidence := &pillarboxEvidence{width: v.Width, height: v.Height, border: border, safe: true}
+	evidence := &pillarboxEvidence{width: v.Width, height: v.Height, border: border, tolerance: max(2, v.Width/200), safe: true}
 	null := "/dev/null"
 	if runtime.GOOS == "windows" {
 		null = "NUL"
@@ -86,10 +100,15 @@ func (t Tools) DetectPillarbox(ctx context.Context, v model.Video, input string,
 	}
 	v.CropChecked = true
 	if evidence.safe && evidence.visible >= 3 {
-		v.CropLeft, v.CropRight = border, border
+		// Include the union of every frame's visible pixels, rounded outward
+		// for chroma alignment. A few pixels of codec residue at the 4:3 edge
+		// must expand the kept image instead of vetoing all border removal.
+		v.CropLeft, v.CropRight = evidence.crops()
 		if log != nil {
-			fmt.Fprintf(log, "\nConfirmed 4:3 pillarbox: %s, cropped %d black pixels per side after checking %d frames\n", v.Relative, border, evidence.frames)
+			fmt.Fprintf(log, "\nConfirmed 4:3 pillarbox: %s, cropped %d left / %d right black pixels after checking %d frames; kept all content bounds [%d,%d)\n", v.Relative, v.CropLeft, v.CropRight, evidence.frames, evidence.left, evidence.right)
 		}
+	} else if log != nil {
+		fmt.Fprintf(log, "\nRetained 16:9 source: %s; %d visible frames, content bounds [%d,%d), expected 4:3 bounds [%d,%d), edge tolerance %d pixels\n", v.Relative, evidence.visible, evidence.left, evidence.right, border, v.Width-border, evidence.tolerance)
 	}
 	return v, nil
 }

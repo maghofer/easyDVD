@@ -41,7 +41,11 @@ boundaries, so the displayed percentage can remain steady during either pass.
 
 For 16:9 input, easyDVD checks every decoded frame before resizing. It removes
 only symmetric black side borders that leave the full centered 4:3 picture.
-A single frame with picture content outside that area prevents cropping.
+A frame with picture content beyond the accepted border area prevents cropping.
+Small variations at the 4:3 boundary are accepted by expanding the kept image to
+include every observed pixel. Crop coordinates are rounded outward for chroma
+alignment; the extra pixels are fitted with padding rather than stretched.
+Content beyond this narrow edge margin still prevents cropping.
 The check uses per-pixel luminance with a two-level tolerance above nominal
 8-bit black for compression residue, retaining 16-bit analysis precision.
 Uncertain or noisier borders keep the original frame. Letterbox bars are retained.
@@ -62,6 +66,18 @@ represented by fabricated results.
 ./bin/easydvd-benchmark.exe -input C:\Scans\sample.mov -output C:\Benchmarks\trial-01 -seconds 10
 ./bin/easydvd-benchmark.exe -input C:\Scans\sample.mov -output C:\Benchmarks\trial-02 -mpeg2enc C:\Tools\mpeg2enc.exe -hcenc C:\Tools\HCenc.exe -ffms2 C:\Tools\ffms2.dll
 ```
+
+Use `-repeats 3` for repeated runs with alternating encoder order and `-offset`
+to select another scene. The report includes per-process wall/CPU time and
+separates MPEG-2 passes from preparation/muxing/validation. For a complete short
+source clip, `-source-pipeline -seconds 1000` includes its original decoding and
+scaling costs. The normal benchmark uses the same DVD-resolution reference for
+both encoders. CPU percentages are normalized to all logical processors.
+
+HCenc can process up to four titles concurrently under Encoding workers;
+FFmpeg retains its two-worker limit. A single title uses one HCenc process,
+whose CPU utilization depends on its own threading. The default remains two
+workers. Raising HCenc process priority does not remove a thread-scaling limit.
 
 The benchmark's optional `-hcenc` / `-ffms2` paths are independent of the app's
 encoder setting and require the same matching-bitness AviSynth runtime. The

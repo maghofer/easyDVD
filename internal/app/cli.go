@@ -73,7 +73,7 @@ func CLI(args []string) error {
 	ffmpegDir := fs.String("ffmpeg-dir", "", "Use FFmpeg and FFprobe from this folder for this run")
 	downloadFFmpeg := fs.Bool("download-ffmpeg", false, "Download and remember the recommended private FFmpeg installation")
 	resume := fs.Bool("resume", false, "Resume saved queue")
-	workers := fs.Int("encoders", 2, "Parallel encoders (1–2)")
+	workers := fs.Int("encoders", 2, "Parallel encoders (1–4 HCenc, 1–2 FFmpeg)")
 	encoder := fs.String("video-encoder", defaults.Encoder(), "Video encoder: HCenc or FFmpeg")
 	hcencDir := fs.String("hcenc-dir", "", "HCenc folder with 32-bit AviSynth.dll and ffms2.dll")
 	if err := fs.Parse(args); err != nil {

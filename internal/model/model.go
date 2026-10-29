@@ -70,8 +70,8 @@ func (s Settings) Validate() error {
 	if s.TitlesPerPage < 1 || s.TitlesPerPage > max {
 		return fmt.Errorf("titles per page must be 1–%d for this layout", max)
 	}
-	if s.Encoders < 1 || s.Encoders > 2 {
-		return fmt.Errorf("use one or two encoding workers")
+	if s.Encoders < 1 || s.Encoders > s.MaxEncoders() {
+		return fmt.Errorf("use 1–%d encoding workers with %s", s.MaxEncoders(), s.Encoder())
 	}
 	if !filepath.IsAbs(s.OutputDir) || !filepath.IsAbs(s.WorkDir) {
 		return fmt.Errorf("output and work folders must be absolute paths")
@@ -113,7 +113,7 @@ func (s Settings) EncodingKey() string {
 	if s.VideoEncoder == "" {
 		return Hash("mpeg2-v2-8000-9000-ac3-256-2pass-" + s.Standard)
 	}
-	return Hash("mpeg2-v3-pillarbox-8000-9000-ac3-256-2pass-" + s.Encoder() + "-" + s.Standard)
+	return Hash("mpeg2-v4-pillarbox-bounds-8000-9000-ac3-256-2pass-" + s.Encoder() + "-" + s.Standard)
 }
 
 // Empty identifies queues saved before encoder selection existed.
@@ -122,6 +122,13 @@ func (s Settings) Encoder() string {
 		return "FFmpeg"
 	}
 	return s.VideoEncoder
+}
+
+func (s Settings) MaxEncoders() int {
+	if s.Encoder() == "HCenc" {
+		return 4
+	}
+	return 2
 }
 
 func (v Video) ArtifactKey(s Settings) string {
@@ -146,6 +153,7 @@ type Video struct {
 	CropLeft    int     `json:"crop_left,omitempty"`
 	CropRight   int     `json:"crop_right,omitempty"`
 	CropChecked bool    `json:"crop_checked,omitempty"`
+	CropVersion int     `json:"crop_version,omitempty"`
 	FPS         float64 `json:"fps"`
 	FieldOrder  string  `json:"field_order"`
 	VideoStream int     `json:"video_stream"`

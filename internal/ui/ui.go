@@ -424,10 +424,25 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 	if !s.NoMenu && (id == "" || u.selectedJob() == nil || len(u.selectedJob().ActiveVideos()) != 1) {
 		noMenu.Disable()
 	}
-	workers := widget.NewSelect([]string{"1", "2"}, nil)
+	workerOptions := []string{"1", "2"}
+	if s.Encoder() == "HCenc" {
+		workerOptions = append(workerOptions, "3", "4")
+	}
+	workers := widget.NewSelect(workerOptions, nil)
 	workers.SetSelected(strconv.Itoa(s.Encoders))
 	encoder := widget.NewSelect([]string{"HCenc", "FFmpeg"}, nil)
 	encoder.SetSelected(s.Encoder())
+	encoder.OnChanged = func(value string) {
+		count, _ := strconv.Atoi(workers.Selected)
+		options := []string{"1", "2"}
+		if value == "HCenc" {
+			options = append(options, "3", "4")
+		} else if count > 2 {
+			count = 2
+		}
+		workers.SetOptions(options)
+		workers.SetSelected(strconv.Itoa(max(1, count)))
+	}
 	hcencFolder := widget.NewEntry()
 	hcencFolder.SetText(s.HCencDir)
 	hcencFolder.SetPlaceHolder("Choose the HCenc installation folder, or leave blank for automatic detection")

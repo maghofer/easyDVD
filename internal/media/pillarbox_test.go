@@ -40,3 +40,23 @@ func TestPillarboxKeepsContentAspectAndCacheIdentity(t *testing.T) {
 		t.Fatal("changed cropping reused an encoded artifact")
 	}
 }
+
+func TestSmallEdgeVariationExpandsKeptImage(t *testing.T) {
+	p := &pillarboxEvidence{width: 1280, height: 720, border: 160, tolerance: 6, safe: true}
+	for _, crop := range []string{"960:720:160:0", "961:720:160:0", "962:720:159:0", "963:720:158:0", "963:720:159:0"} {
+		fmt.Fprintf(p, "crop=%s\n", crop)
+	}
+	left, right := p.crops()
+	if !p.safe || left != 158 || right != 158 {
+		t.Fatal("edge variation vetoed crop or removed visible pixels", p, left, right)
+	}
+	v := model.Video{Width: 1280, Height: 720, DAR: 16.0 / 9, CropLeft: left, CropRight: right}
+	f, _ := VideoFilter(v, model.DefaultSettings(t.TempDir()))
+	if v.Aspect() != "4:3" || !strings.Contains(f, "crop=964:720:158:0") || !strings.Contains(f, "pad=720:576") {
+		t.Fatal(f)
+	}
+	fmt.Fprintf(p, "crop=1280:720:0:0\n")
+	if p.safe {
+		t.Fatal("real widescreen content must still prevent cropping")
+	}
+}

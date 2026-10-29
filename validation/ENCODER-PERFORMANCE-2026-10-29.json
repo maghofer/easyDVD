@@ -1,0 +1,328 @@
+{
+  "date": "2026-10-29",
+  "cpu": "AMD Ryzen 7 9800X3D",
+  "physical_cores": 8,
+  "logical_cpus": 16,
+  "standard": "PAL",
+  "output": "MPEG-2 720x576 25 fps 4:3, AC-3 256 kbps",
+  "video_target_kbps": 8000,
+  "video_max_kbps": 9000,
+  "hcenc_profile": "BEST",
+  "source": "H.264 1280x720 progressive at 18 fps; deidentified real film-scan fixture",
+  "benchmarks": {
+    "prepared": {
+      "input_mode": "DVD-resolution prepared reference",
+      "duration_seconds": 60,
+      "runs": [
+        {
+          "Run": 1,
+          "Encoder": "FFmpeg",
+          "Status": "authored",
+          "Seconds": 1.5358067,
+          "CPUSeconds": 7.6875,
+          "CPUPercent": 31.2844546126801,
+          "EncodingSeconds": 1.3490258,
+          "EncodingCPUPercent": 30.98300640358398,
+          "EncodingFPS": 1111.9135008389017,
+          "Bytes": 54830123,
+          "PSNR": "44.276801",
+          "SSIM": "0.975386"
+        },
+        {
+          "Run": 1,
+          "Encoder": "HCenc",
+          "Status": "authored",
+          "Seconds": 15.9722931,
+          "CPUSeconds": 54.25,
+          "CPUPercent": 21.228166668191182,
+          "EncodingSeconds": 13.5544469,
+          "EncodingCPUPercent": 20.562324641959385,
+          "EncodingFPS": 110.66478854257048,
+          "Bytes": 59973269,
+          "PSNR": "44.539718",
+          "SSIM": "0.979832"
+        },
+        {
+          "Run": 2,
+          "Encoder": "HCenc",
+          "Status": "authored",
+          "Seconds": 15.5190543,
+          "CPUSeconds": 53.765625,
+          "CPUPercent": 21.65306917252039,
+          "EncodingSeconds": 13.0973016,
+          "EncodingCPUPercent": 21.071253524466442,
+          "EncodingFPS": 114.52740769136751,
+          "Bytes": 59524582,
+          "PSNR": "44.527139",
+          "SSIM": "0.979758"
+        },
+        {
+          "Run": 2,
+          "Encoder": "FFmpeg",
+          "Status": "authored",
+          "Seconds": 1.4946086,
+          "CPUSeconds": 8.328125,
+          "CPUPercent": 34.82569366321056,
+          "EncodingSeconds": 1.3125353999999998,
+          "EncodingCPUPercent": 34.82048941308555,
+          "EncodingFPS": 1142.8263191987053,
+          "Bytes": 54830123,
+          "PSNR": "44.276801",
+          "SSIM": "0.975386"
+        },
+        {
+          "Run": 3,
+          "Encoder": "FFmpeg",
+          "Status": "authored",
+          "Seconds": 1.4965806,
+          "CPUSeconds": 8.0625,
+          "CPUPercent": 33.67050528384505,
+          "EncodingSeconds": 1.3134335,
+          "EncodingCPUPercent": 34.49927232707252,
+          "EncodingFPS": 1142.0448770341247,
+          "Bytes": 54830123,
+          "PSNR": "44.276801",
+          "SSIM": "0.975386"
+        },
+        {
+          "Run": 3,
+          "Encoder": "HCenc",
+          "Status": "authored",
+          "Seconds": 15.717074,
+          "CPUSeconds": 53.015625,
+          "CPUPercent": 21.082019226352184,
+          "EncodingSeconds": 13.3027151,
+          "EncodingCPUPercent": 20.43755714200028,
+          "EncodingFPS": 112.75893595586362,
+          "Bytes": 59735462,
+          "PSNR": "44.534609",
+          "SSIM": "0.979822"
+        }
+      ],
+      "medians": {
+        "FFmpeg": {
+          "Seconds": 1.4965806,
+          "CPUPercent": 33.67050528384505,
+          "EncodingSeconds": 1.3134335,
+          "EncodingCPUPercent": 34.49927232707252,
+          "Bytes": 54830123.0,
+          "PSNR": 44.276801,
+          "SSIM": 0.975386
+        },
+        "HCenc": {
+          "Seconds": 15.717074,
+          "CPUPercent": 21.228166668191182,
+          "EncodingSeconds": 13.3027151,
+          "EncodingCPUPercent": 20.562324641959385,
+          "Bytes": 59735462.0,
+          "PSNR": 44.534609,
+          "SSIM": 0.979822
+        }
+      }
+    },
+    "source_pipeline": {
+      "input_mode": "Original-resolution source decoding and scaling",
+      "duration_seconds": 60,
+      "runs": [
+        {
+          "Run": 1,
+          "Encoder": "FFmpeg",
+          "Status": "authored",
+          "Seconds": 2.0645383,
+          "CPUSeconds": 25.671875,
+          "CPUPercent": 77.7167557269342,
+          "EncodingSeconds": 1.8835001999999998,
+          "EncodingCPUPercent": 79.74265811068139,
+          "EncodingFPS": 796.3896154616815,
+          "Bytes": 55421404,
+          "PSNR": "43.856987",
+          "SSIM": "0.973764"
+        },
+        {
+          "Run": 1,
+          "Encoder": "HCenc",
+          "Status": "authored",
+          "Seconds": 17.7779251,
+          "CPUSeconds": 64.140625,
+          "CPUPercent": 22.54925161373303,
+          "EncodingSeconds": 14.8261964,
+          "EncodingCPUPercent": 19.549434135379453,
+          "EncodingFPS": 101.1722736925298,
+          "Bytes": 59734256,
+          "PSNR": "43.601239",
+          "SSIM": "0.976982"
+        },
+        {
+          "Run": 2,
+          "Encoder": "HCenc",
+          "Status": "authored",
+          "Seconds": 18.6528627,
+          "CPUSeconds": 66.890625,
+          "CPUPercent": 22.412988985867567,
+          "EncodingSeconds": 15.621947800000001,
+          "EncodingCPUPercent": 18.94119998915884,
+          "EncodingFPS": 96.0187563806864,
+          "Bytes": 59993740,
+          "PSNR": "43.592824",
+          "SSIM": "0.976968"
+        },
+        {
+          "Run": 2,
+          "Encoder": "FFmpeg",
+          "Status": "authored",
+          "Seconds": 2.0171053,
+          "CPUSeconds": 25.71875,
+          "CPUPercent": 79.68953703111087,
+          "EncodingSeconds": 1.8342578,
+          "EncodingCPUPercent": 82.73526900090053,
+          "EncodingFPS": 817.7694542173952,
+          "Bytes": 55421404,
+          "PSNR": "43.856987",
+          "SSIM": "0.973764"
+        },
+        {
+          "Run": 3,
+          "Encoder": "FFmpeg",
+          "Status": "authored",
+          "Seconds": 2.0217354,
+          "CPUSeconds": 24.5625,
+          "CPUPercent": 75.93259978531316,
+          "EncodingSeconds": 1.836566,
+          "EncodingCPUPercent": 81.46147483945582,
+          "EncodingFPS": 816.7416798525073,
+          "Bytes": 55421404,
+          "PSNR": "43.856987",
+          "SSIM": "0.973764"
+        },
+        {
+          "Run": 3,
+          "Encoder": "HCenc",
+          "Status": "authored",
+          "Seconds": 17.0604499,
+          "CPUSeconds": 64.96875,
+          "CPUPercent": 23.800936662285796,
+          "EncodingSeconds": 14.1210292,
+          "EncodingCPUPercent": 19.993175762996085,
+          "EncodingFPS": 106.22455196112759,
+          "Bytes": 59723629,
+          "PSNR": "43.613617",
+          "SSIM": "0.977045"
+        }
+      ],
+      "medians": {
+        "FFmpeg": {
+          "Seconds": 2.0217354,
+          "CPUPercent": 77.7167557269342,
+          "EncodingSeconds": 1.836566,
+          "EncodingCPUPercent": 81.46147483945582,
+          "Bytes": 55421404.0,
+          "PSNR": 43.856987,
+          "SSIM": 0.973764
+        },
+        "HCenc": {
+          "Seconds": 17.7779251,
+          "CPUPercent": 22.54925161373303,
+          "EncodingSeconds": 14.8261964,
+          "EncodingCPUPercent": 19.549434135379453,
+          "Bytes": 59734256.0,
+          "PSNR": 43.601239,
+          "SSIM": 0.976982
+        }
+      }
+    }
+  },
+  "priority_runs": [
+    {
+      "priority": "IDLE",
+      "copies": 1,
+      "seconds": 12.9943314,
+      "cpu_seconds": 42.734375,
+      "cpu_percent": 20.554335234977923,
+      "fps": 115.43495035073525
+    },
+    {
+      "priority": "NORMAL",
+      "copies": 1,
+      "seconds": 14.3404926,
+      "cpu_seconds": 43.765625,
+      "cpu_percent": 19.074320797738846,
+      "fps": 104.59891733426228
+    },
+    {
+      "priority": "NORMAL",
+      "copies": 1,
+      "seconds": 13.0772834,
+      "cpu_seconds": 43.0625,
+      "cpu_percent": 20.580774826673863,
+      "fps": 114.70272182064969
+    },
+    {
+      "priority": "IDLE",
+      "copies": 1,
+      "seconds": 13.8274325,
+      "cpu_seconds": 43.9375,
+      "cpu_percent": 19.85975162055573,
+      "fps": 108.48000885196872
+    },
+    {
+      "priority": "IDLE",
+      "copies": 1,
+      "seconds": 14.2496069,
+      "cpu_seconds": 45.40625,
+      "cpu_percent": 19.915571320076204,
+      "fps": 105.26606176062303
+    },
+    {
+      "priority": "NORMAL",
+      "copies": 1,
+      "seconds": 13.0758808,
+      "cpu_seconds": 42.265625,
+      "cpu_percent": 20.202092714855585,
+      "fps": 114.7150255453537
+    },
+    {
+      "priority": "NORMAL",
+      "copies": 2,
+      "seconds": 14.1732161,
+      "cpu_seconds": 93.203125,
+      "cpu_percent": 41.1000246620102,
+      "fps": 211.66684955858398
+    },
+    {
+      "priority": "IDLE",
+      "copies": 2,
+      "seconds": 14.3115074,
+      "cpu_seconds": 93.078125,
+      "cpu_percent": 40.64828847099643,
+      "fps": 209.62152456421188
+    }
+  ],
+  "four_normal": {
+    "priority": "NORMAL",
+    "copies": 4,
+    "seconds": 18.1428816,
+    "cpu_seconds": 203.9375,
+    "cpu_percent": 70.2539653348121,
+    "fps": 330.7082156122322
+  },
+  "four_idle": {
+    "priority": "IDLE",
+    "copies": 4,
+    "seconds": 17.4328555,
+    "cpu_seconds": 202.234375,
+    "cpu_percent": 72.50475079943158,
+    "fps": 344.1776936658484
+  },
+  "crop_regression": {
+    "source_frames_checked": 14312,
+    "content_left": 158,
+    "content_right_exclusive": 1122,
+    "crop_left": 158,
+    "crop_right": 158,
+    "source_duration": 795.111111,
+    "dvd_duration": 795.12,
+    "dvd_aspect": "4:3",
+    "full_dvd_decode": "passed",
+    "iso_hash_matches_manifest": true
+  }
+}

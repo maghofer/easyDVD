@@ -17,6 +17,8 @@ jobs:
         run: ./scripts/audit-source.ps1
   windows:
     runs-on: windows-latest
+    env:
+      EASYDVD_HCENC: ${{ github.workspace }}/.tools/hcenc/bin
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4

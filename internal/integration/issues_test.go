@@ -230,3 +230,65 @@ func TestTinyDetailInBorderPreventsCropping(t *testing.T) {
 		t.Fatal("border detail was removed", v, err)
 	}
 }
+
+func TestNearFourThreeBordersKeepAllContent(t *testing.T) {
+	tools, ctx := issueTools(t)
+	dir := t.TempDir()
+	path := filepath.Join(dir, "edge-variation.mkv")
+	// The picture is four pixels wider than exact 4:3. Keep those pixels and
+	// fit into a 4:3 DVD frame; never retain the original 160-pixel sidebars.
+	if err := process.Run(ctx, tools.FFmpeg, []string{"-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=964x720:r=25,pad=1280:720:158:0", "-t", "1", "-c:v", "ffv1", path}, process.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	v, err := tools.DetectPillarbox(ctx, model.Video{Width: 1280, Height: 720, DAR: 16.0 / 9, Duration: 1}, path, nil)
+	if err != nil || v.CropLeft != 158 || v.CropRight != 158 || v.Aspect() != "4:3" || v.CropVersion != media.PillarboxVersion {
+		t.Fatal(v, err)
+	}
+}
+
+func TestHCencFourWorkers(t *testing.T) {
+	tools, ctx := issueTools(t)
+	dir := t.TempDir()
+	s := model.DefaultSettings(dir)
+	if tools.HCencFolder(s) == "" {
+		t.Skip("HCenc runtime unavailable")
+	}
+	s.Encoders = 4
+	source := filepath.Join(dir, "sources")
+	if err := os.Mkdir(source, 0755); err != nil {
+		t.Fatal(err)
+	}
+	first := filepath.Join(source, "1.mp4")
+	if err := process.Run(ctx, tools.FFmpeg, []string{"-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=320x240:r=25", "-t", "1", "-c:v", "libx264", first}, process.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := 2; n <= 4; n++ {
+		if err := os.WriteFile(filepath.Join(source, fmt.Sprintf("%d.mp4", n)), data, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	st, err := store.Open(filepath.Join(dir, "queue.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	e, err := engine.New(st, s, tools)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	if err = e.Add(source); err != nil {
+		t.Fatal(err)
+	}
+	e.Start()
+	j := wait(t, e, func(s engine.Snapshot) bool {
+		return s.Jobs[0].State == model.Complete || s.Jobs[0].State == model.Blocked
+	}).Jobs[0]
+	if j.State != model.Complete || len(j.Videos) != 4 || len(j.Discs) != 1 {
+		t.Fatal(j.State, j.Error)
+	}
+}

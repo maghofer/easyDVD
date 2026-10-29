@@ -46,3 +46,19 @@ func TestEncodingKeyAndSettings(t *testing.T) {
 		t.Fatal("illegal menu density accepted")
 	}
 }
+
+func TestWorkerLimitsFollowEncoder(t *testing.T) {
+	s := DefaultSettings(t.TempDir())
+	s.Encoders = 4
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	s.VideoEncoder = "FFmpeg"
+	if err := s.Validate(); err == nil {
+		t.Fatal("four FFmpeg workers should not be allowed")
+	}
+	s.Encoders = 2
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

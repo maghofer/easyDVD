@@ -294,6 +294,7 @@ func (e *Engine) scanLocked(id string) {
 						v.Excluded = previous.Excluded
 						if previous.Fingerprint() == v.Fingerprint() {
 							v.CropLeft, v.CropRight, v.CropChecked = previous.CropLeft, previous.CropRight, previous.CropChecked
+							v.CropVersion = previous.CropVersion
 							v.Encoded = previous.Encoded
 							v.EncodedSize = previous.EncodedSize
 							v.EncodedHash = previous.EncodedHash
@@ -1194,7 +1195,7 @@ func (e *Engine) encode(ctx context.Context, j model.Job, videos []model.Video, 
 					release()
 					continue
 				}
-				if v.Encoded == "" && !v.CropChecked {
+				if v.Encoded == "" && (!v.CropChecked || v.CropVersion != media.PillarboxVersion) {
 					e.update(j.ID, false, func(job *model.Job) { job.Stage = "Checking black borders · " + v.Label })
 					var err error
 					v, err = e.tools.DetectPillarbox(ctx, v, task.input, log)

@@ -15,6 +15,15 @@ func TestProcessHelper(t *testing.T) {
 	if os.Getenv("EASYDVD_PROCESS_TEST") != "1" {
 		return
 	}
+	if os.Args[len(os.Args)-1] == "cpu" {
+		end := time.Now().Add(120 * time.Millisecond)
+		var sum uint64
+		for time.Now().Before(end) {
+			sum = sum*1664525 + 1013904223
+		}
+		fmt.Println(sum)
+		os.Exit(0)
+	}
 	if len(os.Args) > 0 && os.Args[len(os.Args)-1] == "spawn" {
 		exe, _ := os.Executable()
 		cmd := exec.Command(exe, "-test.run=TestProcessHelper", "--", "child")
@@ -55,5 +64,20 @@ func TestFatalDiagnosticBeforeEarlierWarnings(t *testing.T) {
 	got := failureDiagnostics(log)
 	if !strings.HasPrefix(got, "ERR:  Can only have 128 commands") || !strings.Contains(got, "WARN: Audio timestamps") {
 		t.Fatal("fatal cause must be visible while retaining earlier context", got)
+	}
+}
+
+func TestObservedProcessReportsCPUAndWallTime(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var measurements []Metrics
+	ctx := Observe(context.Background(), func(m Metrics) { measurements = append(measurements, m) })
+	if err := Run(ctx, exe, []string{"-test.run=TestProcessHelper", "--", "cpu"}, Options{Env: []string{"EASYDVD_PROCESS_TEST=1"}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(measurements) != 1 || measurements[0].CPUSeconds <= 0 || measurements[0].Seconds <= 0 || measurements[0].CPUPercent <= 0 {
+		t.Fatal(measurements)
 	}
 }

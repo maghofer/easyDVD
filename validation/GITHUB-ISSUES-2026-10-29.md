@@ -1,5 +1,9 @@
 # GitHub issue validation — 2026-10-29
 
+Follow-up: [performance measurements and the additional H.264 pillarbox
+regression](ENCODER-PERFORMANCE-2026-10-29.md). That report records the stricter
+boundary check's failure on the user's additional fixture and its correction.
+
 Addresses issues [#1](https://github.com/maghofer/easyDVD/issues/1),
 [#2](https://github.com/maghofer/easyDVD/issues/2),
 [#3](https://github.com/maghofer/easyDVD/issues/3),
