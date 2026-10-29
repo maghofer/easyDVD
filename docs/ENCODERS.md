@@ -1,113 +1,107 @@
-# MPEG-2 encoder comparison
+# DVD encoding quality
 
-HCenc is the default video encoder for new jobs. It uses the BEST profile and
-two-pass VBR at 8 Mbps average / 9 Mbps maximum. FFmpeg remains available in
-Settings / Video encoder. Existing started jobs retain their previous encoder
-and compatible saved encodes. Neither encoder is declared a universal quality
-winner; review actual film scans, especially moving grain and fine texture.
+FFmpeg is the sole video encoder. The normal package keeps FFmpeg/FFprobe
+external: locate a compatible installation or accept the app's private download.
+There is no separate encoder runtime to install.
 
-## HCenc setup
+## Bitrate and disc space
 
-HCenc 0.28 requires **32-bit** AviSynth and FFMS2 even though easyDVD itself is
-64-bit. These components are installed separately from the normal portable app.
-The pinned setup helper downloads and verifies all three components, preserves
-their notices and creates a private runtime without changing system AviSynth:
+Every title uses two-pass VBR with a **9,000 kbps target and maximum**. easyDVD
+never lowers a title's bitrate to fit more footage on a disc: it packs the actual
+encoded sizes and uses additional discs when needed. A title that cannot fit
+whole on the selected medium is reported; choose DVD-9 or split the source.
 
-```powershell
-./scripts/prepare-hcenc.ps1 -OutputDir C:\Tools\easyDVD-HCenc
+The ceiling follows FFmpeg's DVD target, leaving room for 448 kbps AC-3,
+navigation and multiplexing within the 10,080 kbps programme-stream mux rate.
+The DVD video buffer is 1,835,008 bits. A short programme may leave much of a
+disc empty: exceeding the bitrate ceiling or adding padding cannot improve it.
+Very simple material can also use fewer bits after reaching quantizer 1.
+ISO size checks and packing reserves remain authoritative for disc capacity.
+
+## Production profile
+
+Both passes use the same quality settings:
+
+```text
+-c:v mpeg2video -profile:v 4 -level:v 8 -pix_fmt yuv420p
+-b:v 9000k -maxrate:v 9000k -minrate:v 0 -bufsize:v 1835008
+-qmin 1 -lmin 118 -mbd rd -trellis 1 -intra_vlc 1
+-cmp satd -subcmp satd -mepre 1 -precmp satd
+-dia_size 2 -pre_dia_size 2 -last_pred 3 -bidir_refine 2
+-mpv_flags +mv0+cbp_rd
+-bf 2 -flags +cgop -sc_threshold 1000000000 -dc 10
 ```
 
-7-Zip is required for setup. Choose the resulting directory in Settings / HCenc
-folder, or put it at `tools/hcenc` beside easyDVD.exe. Developers can run the
-script without `-OutputDir` to use the detected `.tools/hcenc/bin` directory.
-The runtime ZIP includes the same setup script; running it without `-OutputDir`
-there installs into `tools/hcenc`, which the app detects automatically.
-`EASYDVD_HCENC` and CLI `-hcenc-dir` are also supported. The directory contains
-`HCenc_028.exe`, `AviSynth.dll` and `ffms2.dll`; mismatched 64-bit components are
-rejected. Windows may need the Microsoft Visual C++ x86 runtime used by these
-upstream components. A missing HCenc setup is reported explicitly; choose
-FFmpeg in Settings to use the existing encoder instead.
+This is MPEG-2 Main Profile at Main Level. PAL uses 720×576 at 25 fps with a
+maximum 15-picture GOP; NTSC uses 720×480 at 30000/1001 fps with an 18-picture
+GOP. Closed GOPs and two B pictures are retained. The display aspect is 4:3 or
+16:9 according to the actual picture. Each pass gets up to eight software
+encoding threads, scaled down for the configured one or two concurrent titles.
 
-FFmpeg prepares DVD-resolution frames in a lossless FFV1 intermediate, preserving
-the chosen crop, aspect, cadence and interlacing. HCenc performs both VBR passes
-in one invocation. Its log must confirm both passes and the full prepared frame
-count. FFmpeg encodes AC-3 audio (or silence for silent sources), muxes the DVD
-stream and fully decodes it before checkpointing. Temporary lossless files are
-removed after each encode attempt; the space estimate includes simultaneous
-lossless intermediates. HCenc's progress advances at preparation and encoding
-boundaries, so the displayed percentage can remain steady during either pass.
+`qmin 1` and `lmin 118` permit finer quantization when space permits. Raising
+only the target bitrate left the previous profile limited by quantizer 2 on
+the tested footage. Rate-distortion macroblock decisions, trellis quantization,
+intra VLC coding and the motion-search settings improve the use of available
+bits. Nonlinear quantization and quantizer RD search were tested but omitted
+because they regressed some of the supplied film samples.
+
+Pass one writes statistics without audio. Pass two encodes the selected audio
+track to stereo AC-3 at **448 kbps / 48 kHz**, pads short audio, and creates silence
+when needed. DVD muxing uses `-f dvd -muxrate 10080k -packetsize 2048`. The
+source duration limits the result; every encoded MPG is fully decoded and
+hashed before it can become a reusable checkpoint. A profile version change
+invalidates old encoded checkpoints when an unfinished job resumes.
+
+Resizing uses Lanczos and BT.601 limited-range output, with BT.709 input assumed
+for HD and BT.601 for SD. PAL tags are `bt470bg`, NTSC tags `smpte170m`, with
+`bt709` transfer. No denoising, sharpening or custom quantization matrix is
+applied. Matching interlaced footage retains field-aware scaling, field order
+and `+ildct+ilme`; other interlaced footage is deinterlaced before conversion.
+
+The measured improvements, costs and validation scope are recorded in
+[the quality report](../validation/FFMPEG-QUALITY-2026-10-29.md). These are
+measurements on particular samples, not a universal claim about every source.
 
 ## Automatic pillarbox removal
 
 For 16:9 input, easyDVD checks every decoded frame before resizing. It removes
 only symmetric black side borders that leave the full centered 4:3 picture.
-A frame with picture content beyond the accepted border area prevents cropping.
-Small variations at the 4:3 boundary are accepted by expanding the kept image to
-include every observed pixel. Crop coordinates are rounded outward for chroma
-alignment; the extra pixels are fitted with padding rather than stretched.
-Content beyond this narrow edge margin still prevents cropping.
+Small variations at the boundary expand the kept image to include every
+observed pixel, rounded outward for chroma alignment. The cropped picture's
+actual display aspect controls scaling and DVD aspect; rounding differences
+are padded rather than stretched. Wider content or small visible marks deeper
+in a border prevent cropping. Letterbox bars are retained.
+
 The check uses per-pixel luminance with a two-level tolerance above nominal
-8-bit black for compression residue, retaining 16-bit analysis precision.
-Uncertain or noisier borders keep the original frame. Letterbox bars are retained.
-The cropped picture's actual display aspect controls scaling and DVD aspect;
-rounding differences are padded rather than stretched. The border check adds a
-decoding pass for new 16:9 encodes; completed compatible checkpoints are reused.
+8-bit black, retaining 16-bit analysis precision. Uncertain or noisier borders
+keep the original frame. This adds a decoding pass to new 16:9 encodes;
+completed compatible checkpoints are reused.
 
-## Repeatable harness
+## Repeatable benchmark
 
-`easydvd-benchmark` normalizes a short source exactly once to a YUV4MPEG reference.
-Each encoder consumes those prepared frames. The directory contains the
-reference and source hashes, encoded samples, elapsed encoding times, elementary
-video sizes, PSNR/SSIM measurements, logs, and a basic authoring-test ISO per
-successful encoder. A missing candidate is recorded as unavailable rather than
-represented by fabricated results.
+`easydvd-benchmark` prepares a progressive DVD-resolution YUV4MPEG reference,
+runs the production FFmpeg path, measures video size and PSNR/SSIM, and authors
+a test ISO. The report records reference/source hashes, per-process wall and CPU
+time, and separate timings for both MPEG-2 passes. Audio and muxing are excluded
+from the reported elementary video size. Preparation, metrics and authoring
+are excluded from the encode timing.
 
 ```powershell
-./bin/easydvd-benchmark.exe -input C:\Scans\sample.mov -output C:\Benchmarks\trial-01 -seconds 10
-./bin/easydvd-benchmark.exe -input C:\Scans\sample.mov -output C:\Benchmarks\trial-02 -mpeg2enc C:\Tools\mpeg2enc.exe -hcenc C:\Tools\HCenc.exe -ffms2 C:\Tools\ffms2.dll
+./bin/easydvd-benchmark.exe -input C:\Scans\sample.mov -output C:\Benchmarks\trial-01 -seconds 20 -repeats 3
 ```
 
-Use `-repeats 3` for repeated runs with alternating encoder order and `-offset`
-to select another scene. The report includes per-process wall/CPU time and
-separates MPEG-2 passes from preparation/muxing/validation. For a complete short
-source clip, `-source-pipeline -seconds 1000` includes its original decoding and
-scaling costs. The normal benchmark uses the same DVD-resolution reference for
-both encoders. CPU percentages are normalized to all logical processors.
+Use `-offset` for another scene. For a complete short progressive source,
+`-source-pipeline -seconds 1000` includes original decoding and resizing in each
+timed encode. Otherwise the prepared reference is the encode input. Interlaced
+sources are deinterlaced for the prepared-reference measurement; retained-field
+encoding is validated separately by integration tests. Runs are sequential;
+CPU percentages are normalized to all logical processors.
 
-HCenc can process up to four titles concurrently under Encoding workers;
-FFmpeg retains its two-worker limit. A single title uses one HCenc process,
-whose CPU utilization depends on its own threading. The default remains two
-workers. Raising HCenc process priority does not remove a thread-scaling limit.
+Review grain, texture, dark scenes, pans and transitions in motion as well as
+PSNR/SSIM. The prepared SD reference is the quality comparison, since DVD
+downscaling itself discards HD detail. Software authoring and decoding checks
+do not replace burned-disc tests in standalone players.
 
-The benchmark's optional `-hcenc` / `-ffms2` paths are independent of the app's
-encoder setting and require the same matching-bitness AviSynth runtime. The
-harness does not switch the app's encoder automatically.
-
-| Candidate | Initial settings | Integration considerations |
-|---|---|---|
-| FFmpeg software MPEG-2 | Two-pass, 8 Mbps average, 9 Mbps peak, DVD VBV/GOP | Available alternative; implemented and tested |
-| mpeg2enc | DVD preset, quality 2, 8 Mbps maximum, progressive reference | Direct Y4M input; compare actual sizes because its rate-control target differs |
-| HCenc | BEST profile, two-pass, 8 Mbps average, 9 Mbps maximum | Default for new jobs; private x86 AviSynth/FFMS2 runtime |
-
-## Evaluation
-
-Use several 10–30 second clips: stable grain, strong motion, pans, fine textures,
-dark footage, fades, saturated colors, and scene changes. Include 4:3 SD and HD
-scans and unusual stored frame rates. Avoid denoising and sharpening. Review
-decoded results against the prepared DVD-resolution reference, not the HD original.
-
-Compare at approximately equal file sizes as well as the initial settings. A
-smaller sample with slightly lower PSNR is not automatically better, and grain
-can make metric-only rankings misleading. Inspect side-by-side motion playback
-and full-resolution crops. A larger encoder win must survive DVD authoring,
-software navigation and physical-player playback.
-
-The baseline synthetic smoke measurement is in `validation/encoder-baseline.json`.
-It verifies the harness; synthetic test patterns do not determine the best encoder
-for 8mm/16mm scans. Full three-encoder comparison on representative scans remains
-a release/research task until the optional encoders and footage are provided.
-
-References: [FFmpeg codecs](https://ffmpeg.org/ffmpeg-codecs.html),
-[DVD targets](https://ffmpeg.org/ffmpeg.html),
-[MJPEG tools](https://mjpeg.sourceforge.io/),
-[HCenc manual](https://hank315.nl/files/HC_028/HC028.pdf).
+References: [FFmpeg DVD targets](https://ffmpeg.org/ffmpeg.html#target),
+[codec options](https://ffmpeg.org/ffmpeg-codecs.html),
+[MPlayer/MEncoder MPEG-2 encoding guidance](https://www.mplayerhq.hu/DOCS/HTML/en/MPlayer.html).

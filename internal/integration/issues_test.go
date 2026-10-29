@@ -49,7 +49,6 @@ func TestSelectedFilesSurviveRescanAndExclusion(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := model.DefaultSettings(dir)
-	s.VideoEncoder = "FFmpeg"
 	s.Encoders = 1
 	st, err := store.Open(filepath.Join(dir, "queue.db"))
 	if err != nil {
@@ -118,82 +117,71 @@ func TestSingleFileAutoplayAndPillarbox(t *testing.T) {
 	if err := process.Run(ctx, tools.FFmpeg, []string{"-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=960x720:r=25,pad=1280:720:160:0", "-t", "2", "-c:v", "libx264", path}, process.Options{}); err != nil {
 		t.Fatal(err)
 	}
-	for _, encoder := range []string{"FFmpeg", "HCenc"} {
-		for _, standard := range []string{"PAL", "NTSC"} {
-			t.Run(encoder+"/"+standard, func(t *testing.T) {
-				s := model.DefaultSettings(dir)
-				s.VideoEncoder, s.Standard, s.NoMenu, s.KeepWork, s.Encoders = encoder, standard, true, true, 1
-				if encoder == "HCenc" && tools.HCencFolder(s) == "" {
-					t.Skip("HCenc runtime unavailable")
+	for _, standard := range []string{"PAL", "NTSC"} {
+		t.Run(standard, func(t *testing.T) {
+			s := model.DefaultSettings(dir)
+			s.Standard, s.NoMenu, s.KeepWork, s.Encoders = standard, true, true, 1
+			s.WorkDir = filepath.Join(dir, standard+" café Ω")
+			s.OutputDir = filepath.Join(dir, standard+" output")
+			st, err := store.Open(filepath.Join(s.WorkDir, "queue.db"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer st.Close()
+			e, err := engine.New(st, s, tools)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer e.Close()
+			if err = e.Add(path); err != nil {
+				t.Fatal(err)
+			}
+			e.Start()
+			j := wait(t, e, func(s engine.Snapshot) bool {
+				return s.Jobs[0].State == model.Complete || s.Jobs[0].State == model.Blocked
+			}).Jobs[0]
+			if j.State != model.Complete {
+				t.Fatal(j.Error)
+			}
+			v := j.Videos[0]
+			if v.CropLeft != 160 || v.CropRight != 160 || v.Aspect() != "4:3" {
+				t.Fatal(v)
+			}
+			authorDir := filepath.Join(s.WorkDir, "jobs", j.ID, "generation-"+j.Generation, "disc-001")
+			xml, err := os.ReadFile(filepath.Join(authorDir, "dvd.xml"))
+			if err != nil || !strings.Contains(string(xml), "<fpc>jump title 1;</fpc>") || strings.Contains(string(xml), "<menus>") {
+				t.Fatal(string(xml), err)
+			}
+			if pages, _ := filepath.Glob(filepath.Join(authorDir, "page-*")); len(pages) != 0 {
+				t.Fatal("menu-free job generated menu assets", pages)
+			}
+			var out bytes.Buffer
+			if err = process.Run(ctx, tools.FFprobe, []string{"-v", "error", "-f", "dvdvideo", "-title", "1", "-i", j.Discs[0].ISO, "-show_streams", "-show_format", "-of", "json"}, process.Options{Stdout: &out}); err != nil {
+				t.Fatal(err)
+			}
+			var probe struct {
+				Streams []struct {
+					Codec  string `json:"codec_name"`
+					DAR    string `json:"display_aspect_ratio"`
+					Height int    `json:"height"`
 				}
-				s.WorkDir = filepath.Join(dir, encoder+standard+" café Ω")
-				s.OutputDir = filepath.Join(dir, encoder+standard+" output")
-				st, err := store.Open(filepath.Join(s.WorkDir, "queue.db"))
-				if err != nil {
-					t.Fatal(err)
+				Format struct {
+					Duration string `json:"duration"`
 				}
-				defer st.Close()
-				e, err := engine.New(st, s, tools)
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer e.Close()
-				if err = e.Add(path); err != nil {
-					t.Fatal(err)
-				}
-				e.Start()
-				j := wait(t, e, func(s engine.Snapshot) bool {
-					return s.Jobs[0].State == model.Complete || s.Jobs[0].State == model.Blocked
-				}).Jobs[0]
-				if j.State != model.Complete {
-					t.Fatal(j.Error)
-				}
-				v := j.Videos[0]
-				if v.CropLeft != 160 || v.CropRight != 160 || v.Aspect() != "4:3" {
-					t.Fatal(v)
-				}
-				authorDir := filepath.Join(s.WorkDir, "jobs", j.ID, "generation-"+j.Generation, "disc-001")
-				xml, err := os.ReadFile(filepath.Join(authorDir, "dvd.xml"))
-				if err != nil || !strings.Contains(string(xml), "<fpc>jump title 1;</fpc>") || strings.Contains(string(xml), "<menus>") {
-					t.Fatal(string(xml), err)
-				}
-				if pages, _ := filepath.Glob(filepath.Join(authorDir, "page-*")); len(pages) != 0 {
-					t.Fatal("menu-free job generated menu assets", pages)
-				}
-				var out bytes.Buffer
-				if err = process.Run(ctx, tools.FFprobe, []string{"-v", "error", "-f", "dvdvideo", "-title", "1", "-i", j.Discs[0].ISO, "-show_streams", "-show_format", "-of", "json"}, process.Options{Stdout: &out}); err != nil {
-					t.Fatal(err)
-				}
-				var probe struct {
-					Streams []struct {
-						Codec  string `json:"codec_name"`
-						DAR    string `json:"display_aspect_ratio"`
-						Height int    `json:"height"`
-					}
-					Format struct {
-						Duration string `json:"duration"`
-					}
-				}
-				if err = json.Unmarshal(out.Bytes(), &probe); err != nil {
-					t.Fatal(err)
-				}
-				if len(probe.Streams) < 2 || probe.Streams[0].Codec != "mpeg2video" || probe.Streams[0].DAR != "4:3" || probe.Streams[0].Height != s.Height() || probe.Streams[1].Codec != "ac3" {
-					t.Fatal(out.String())
-				}
-				if duration := media.Ratio(probe.Format.Duration); duration < 1.92 || duration > 2.08 {
-					t.Fatal("duration drift", duration)
-				}
-				if err = process.Run(ctx, tools.FFmpeg, []string{"-v", "error", "-xerror", "-f", "dvdvideo", "-title", "1", "-i", j.Discs[0].ISO, "-f", "null", "NUL"}, process.Options{}); err != nil {
-					t.Fatal(err)
-				}
-				if encoder == "HCenc" {
-					log, err := os.ReadFile(filepath.Join(filepath.Dir(v.Encoded), "hcenc.log"))
-					if err != nil || !strings.Contains(string(log), "encoding - pass 2") {
-						t.Fatal("no two-pass evidence", err)
-					}
-				}
-			})
-		}
+			}
+			if err = json.Unmarshal(out.Bytes(), &probe); err != nil {
+				t.Fatal(err)
+			}
+			if len(probe.Streams) < 2 || probe.Streams[0].Codec != "mpeg2video" || probe.Streams[0].DAR != "4:3" || probe.Streams[0].Height != s.Height() || probe.Streams[1].Codec != "ac3" {
+				t.Fatal(out.String())
+			}
+			if duration := media.Ratio(probe.Format.Duration); duration < 1.92 || duration > 2.08 {
+				t.Fatal("duration drift", duration)
+			}
+			if err = process.Run(ctx, tools.FFmpeg, []string{"-v", "error", "-xerror", "-f", "dvdvideo", "-title", "1", "-i", j.Discs[0].ISO, "-f", "null", "NUL"}, process.Options{}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -243,52 +231,5 @@ func TestNearFourThreeBordersKeepAllContent(t *testing.T) {
 	v, err := tools.DetectPillarbox(ctx, model.Video{Width: 1280, Height: 720, DAR: 16.0 / 9, Duration: 1}, path, nil)
 	if err != nil || v.CropLeft != 158 || v.CropRight != 158 || v.Aspect() != "4:3" || v.CropVersion != media.PillarboxVersion {
 		t.Fatal(v, err)
-	}
-}
-
-func TestHCencFourWorkers(t *testing.T) {
-	tools, ctx := issueTools(t)
-	dir := t.TempDir()
-	s := model.DefaultSettings(dir)
-	if tools.HCencFolder(s) == "" {
-		t.Skip("HCenc runtime unavailable")
-	}
-	s.Encoders = 4
-	source := filepath.Join(dir, "sources")
-	if err := os.Mkdir(source, 0755); err != nil {
-		t.Fatal(err)
-	}
-	first := filepath.Join(source, "1.mp4")
-	if err := process.Run(ctx, tools.FFmpeg, []string{"-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=320x240:r=25", "-t", "1", "-c:v", "libx264", first}, process.Options{}); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(first)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for n := 2; n <= 4; n++ {
-		if err := os.WriteFile(filepath.Join(source, fmt.Sprintf("%d.mp4", n)), data, 0644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	st, err := store.Open(filepath.Join(dir, "queue.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-	e, err := engine.New(st, s, tools)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer e.Close()
-	if err = e.Add(source); err != nil {
-		t.Fatal(err)
-	}
-	e.Start()
-	j := wait(t, e, func(s engine.Snapshot) bool {
-		return s.Jobs[0].State == model.Complete || s.Jobs[0].State == model.Blocked
-	}).Jobs[0]
-	if j.State != model.Complete || len(j.Videos) != 4 || len(j.Discs) != 1 {
-		t.Fatal(j.State, j.Error)
 	}
 }

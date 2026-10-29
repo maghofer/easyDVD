@@ -1,5 +1,9 @@
 # GitHub issue validation — 2026-10-29
 
+Historical implementation record: the encoder work for issue #7 was subsequently
+superseded by the [FFmpeg-only quality profile](FFMPEG-QUALITY-2026-10-29.md).
+The other issue fixes and regression checks remain in place.
+
 Follow-up: [performance measurements and the additional H.264 pillarbox
 regression](ENCODER-PERFORMANCE-2026-10-29.md). That report records the stricter
 boundary check's failure on the user's additional fixture and its correction.

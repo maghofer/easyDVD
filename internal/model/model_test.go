@@ -1,7 +1,9 @@
 package model
 
 import (
+	"encoding/json"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -12,6 +14,26 @@ func TestSnapshotIsIndependent(t *testing.T) {
 	s.Discs[0].VideoIDs[0] = "two"
 	if j.Videos[0].Label != "Original" || j.Discs[0].VideoIDs[0] != "one" {
 		t.Fatal("snapshot shares mutable state")
+	}
+}
+
+func TestRemovedBackendPreferencesMigrate(t *testing.T) {
+	s := DefaultSettings(t.TempDir())
+	if err := json.Unmarshal([]byte(`{"video_encoder":"HCenc","hcenc_dir":"old location","encoders":4,"standard":"NTSC"}`), &s); err != nil {
+		t.Fatal(err)
+	}
+	if s.Encoders != 2 || s.Standard != "NTSC" {
+		t.Fatal(s)
+	}
+	if err := s.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(s)
+	if err != nil || strings.Contains(string(data), "hcenc") || strings.Contains(string(data), "video_encoder") {
+		t.Fatal(string(data), err)
+	}
+	if s.EncodingKey() == Hash("mpeg2-v4-pillarbox-bounds-8000-9000-ac3-256-2pass-FFmpeg-NTSC") {
+		t.Fatal("old encoding quality checkpoint was accepted")
 	}
 }
 
@@ -44,21 +66,5 @@ func TestEncodingKeyAndSettings(t *testing.T) {
 	s.TitlesPerPage = 13
 	if s.Validate() == nil {
 		t.Fatal("illegal menu density accepted")
-	}
-}
-
-func TestWorkerLimitsFollowEncoder(t *testing.T) {
-	s := DefaultSettings(t.TempDir())
-	s.Encoders = 4
-	if err := s.Validate(); err != nil {
-		t.Fatal(err)
-	}
-	s.VideoEncoder = "FFmpeg"
-	if err := s.Validate(); err == nil {
-		t.Fatal("four FFmpeg workers should not be allowed")
-	}
-	s.Encoders = 2
-	if err := s.Validate(); err != nil {
-		t.Fatal(err)
 	}
 }

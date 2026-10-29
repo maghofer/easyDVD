@@ -21,7 +21,7 @@ func fakeCapabilities(ff, probe, missing string) commandOutput {
 			}
 			return "ffmpeg version " + ff + "-build\n", nil
 		case "-encoders":
-			return " V.S..D mpeg2video MPEG-2\n A....D ac3 AC3\n V....D mjpeg MJPEG\n V....D ffv1 FFV1\n", nil
+			return " V.S..D mpeg2video MPEG-2\n A....D ac3 AC3\n V....D mjpeg MJPEG\n", nil
 		case "-decoders":
 			return " V..... mpeg2video MPEG-2\n A..... ac3 AC3\n V..... png PNG\n", nil
 		case "-filters":
@@ -34,7 +34,7 @@ func fakeCapabilities(ff, probe, missing string) commandOutput {
 			}
 			return out, nil
 		case "-muxers":
-			return " E dvd DVD\n E null NULL\n E image2 images\n E matroska Matroska\n", nil
+			return " E dvd DVD\n E null NULL\n E image2 images\n", nil
 		}
 		return "", fmt.Errorf("unexpected command")
 	}

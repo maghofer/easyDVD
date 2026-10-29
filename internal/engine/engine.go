@@ -76,10 +76,6 @@ func New(st *store.Store, defaults model.Settings, t media.Tools, options ...Opt
 	}
 	for i := range e.jobs {
 		j := &e.jobs[i]
-		if !j.Locked && j.Settings.VideoEncoder == "" {
-			j.Settings.VideoEncoder = settings.VideoEncoder
-			j.Settings.HCencDir = settings.HCencDir
-		}
 		if len(j.ID) != 24 || strings.Trim(j.ID, "0123456789abcdef") != "" {
 			cancel()
 			return nil, fmt.Errorf("invalid saved job identifier")
@@ -900,17 +896,6 @@ func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) err
 	if s.StageLocally {
 		needWork += stage * int64(s.Encoders+1)
 	}
-	if s.Encoder() == "HCenc" {
-		// Bound concurrent lossless intermediates by raw 4:2:0 frame size,
-		// with headroom for the container/codec. FFV1 normally needs less.
-		var largest float64
-		for _, v := range videos {
-			if v.Encoded == "" && v.Duration > largest {
-				largest = v.Duration
-			}
-		}
-		needWork += int64(largest * media.Ratio(s.FPS()) * 720 * float64(s.Height()) * 1.5 * 1.1 * float64(s.Encoders))
-	}
 	output := remaining
 	for _, v := range videos {
 		output += v.EncodedSize
@@ -941,9 +926,6 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 		return err
 	}
 	if err := j.Settings.Validate(); err != nil {
-		return err
-	}
-	if err := e.tools.RequireEncoder(j.Settings); err != nil {
 		return err
 	}
 	if err := fsops.RequireLocal(ctx, j.Settings.WorkDir); err != nil {

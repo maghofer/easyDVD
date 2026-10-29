@@ -36,7 +36,7 @@ func TestAudioAndDVDArgs(t *testing.T) {
 	s := model.DefaultSettings(t.TempDir())
 	v := model.Video{DAR: 4.0 / 3, Width: 720, Height: 576, Duration: 10, VideoStream: 2, AudioStream: -1}
 	args := strings.Join(EncodeArgs(v, s, "source", "pass", "video.mpg", 2), " ")
-	for _, want := range []string{"-pass 2", "-map 0:2", "anullsrc", "-map 1:a:0", "-af apad", "-b:v 8000k", "-maxrate:v 9000k", "-b:a 256k", "-f dvd", "-g 15"} {
+	for _, want := range []string{"-pass 2", "-map 0:2", "anullsrc", "-map 1:a:0", "-af apad", "-b:v 9000k", "-maxrate:v 9000k", "-b:a 448k", "-f dvd", "-g 15"} {
 		if !strings.Contains(args, want) {
 			t.Fatal(want, args)
 		}

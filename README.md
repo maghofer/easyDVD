@@ -52,10 +52,12 @@ using easyDVD.
 3. Choose your TV standard, disc capacity and menu style, then select
    **Start / resume**. Finished ISO files appear in your output folder.
 
-New jobs use HCenc for two-pass MPEG-2 video. Set up its private runtime as
-described in [Encoder setup](docs/ENCODERS.md), or choose **FFmpeg** under
-**Settings → Video encoder**. For a single included video, **Job settings →
-Playback → No menu** creates a disc that starts automatically and stops at the end.
+FFmpeg performs high-quality two-pass MPEG-2 encoding, targeting 9 Mbps video
+with 448 kbps AC-3 audio. easyDVD adds discs instead of reducing the bitrate to
+squeeze more footage onto one disc. FFmpeg remains an external dependency;
+first run can locate it or download a private copy. See [Encoding quality](docs/ENCODERS.md).
+For a single included video, **Job settings → Playback → No menu** creates a
+disc that starts automatically and stops at the end.
 
 For more on menu appearance and presets, see [Menu settings](docs/MENUS.md).
 Report problems or suggest changes through [GitHub Issues](https://github.com/maghofer/easyDVD/issues).

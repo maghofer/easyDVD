@@ -1,5 +1,9 @@
 # Encoder performance and pillarbox follow-up — 2026-10-29
 
+Historical comparison: the final application uses FFmpeg alone with a revised
+quality profile. See [the subsequent quality report](FFMPEG-QUALITY-2026-10-29.md).
+The measurements below describe the earlier profiles and remain unchanged.
+
 Measured on an AMD Ryzen 7 9800X3D (8 cores / 16 logical processors), Windows,
 FFmpeg 9.0.2 and HCenc 0.28.0.2 BEST. Inputs came from a read-only real film-scan
 fixture: H.264, 1280×720, 18 fps, with baked-in black side borders. All benchmark

@@ -17,8 +17,6 @@ jobs:
         run: ./scripts/audit-source.ps1
   windows:
     runs-on: windows-latest
-    env:
-      EASYDVD_HCENC: ${{ github.workspace }}/.tools/hcenc/bin
     steps:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
@@ -28,13 +26,6 @@ jobs:
       - name: Prepare pinned development and media tools
         shell: pwsh
         run: ./scripts/bootstrap.ps1
-      - uses: actions/cache@v4
-        with:
-          path: .tools/hcenc
-          key: ${{ runner.os }}-hcenc-${{ hashFiles('scripts/prepare-hcenc.ps1') }}
-      - name: Prepare pinned HCenc runtime
-        shell: pwsh
-        run: ./scripts/prepare-hcenc.ps1 -CacheDir .tools/hcenc/setup
       - name: Build and validate DVD pipeline
         shell: pwsh
         run: ./scripts/build.ps1 -Test -Integration

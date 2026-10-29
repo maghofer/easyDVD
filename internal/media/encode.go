@@ -110,7 +110,18 @@ func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, 
 	if threads > 8 {
 		threads = 8
 	}
-	args = append(args, "-map", fmt.Sprintf("0:%d", v.VideoStream), "-vf", filter, "-c:v", "mpeg2video", "-pix_fmt", "yuv420p", "-b:v", "8000k", "-maxrate:v", "9000k", "-minrate:v", "0", "-bufsize:v", "1835008", "-g", s.GOP(), "-bf", "2", "-flags", flags, "-sc_threshold", "1000000000", "-dc", "10", "-aspect", v.Aspect(), "-threads", strconv.Itoa(threads), "-pass", strconv.Itoa(pass), "-passlogfile", passlog, "-sn", "-dn", "-progress", "pipe:1", "-nostats")
+	// Use the DVD target's conservative peak for the average too: packing adds
+	// discs instead of lowering quality. qmin AND lmin permit quantizer 1;
+	// raising the bitrate alone leaves easy material capped at quantizer 2.
+	args = append(args, "-map", fmt.Sprintf("0:%d", v.VideoStream), "-vf", filter,
+		"-c:v", "mpeg2video", "-profile:v", "4", "-level:v", "8", "-pix_fmt", "yuv420p",
+		"-b:v", "9000k", "-maxrate:v", "9000k", "-minrate:v", "0", "-bufsize:v", "1835008",
+		"-qmin", "1", "-lmin", "118", "-mbd", "rd", "-trellis", "1", "-intra_vlc", "1",
+		"-cmp", "satd", "-subcmp", "satd", "-mepre", "1", "-precmp", "satd",
+		"-dia_size", "2", "-pre_dia_size", "2", "-last_pred", "3", "-bidir_refine", "2", "-mpv_flags", "+mv0+cbp_rd",
+		"-g", s.GOP(), "-bf", "2", "-flags", flags, "-sc_threshold", "1000000000", "-dc", "10",
+		"-aspect", v.Aspect(), "-threads", strconv.Itoa(threads), "-pass", strconv.Itoa(pass), "-passlogfile", passlog,
+		"-sn", "-dn", "-progress", "pipe:1", "-nostats")
 	if interlaced {
 		order := "tt"
 		if v.FieldOrder == "bb" || v.FieldOrder == "bt" {
@@ -130,7 +141,7 @@ func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, 
 		if v.AudioStream < 0 {
 			audio = "1:a:0"
 		}
-		args = append(args, "-map", audio, "-c:a", "ac3", "-ar", "48000", "-ac", "2", "-b:a", "256k", "-af", "apad", "-shortest", "-t", fmt.Sprintf("%.6f", v.Duration), "-f", "dvd", "-muxrate", "10080k", "-packetsize", "2048", output)
+		args = append(args, "-map", audio, "-c:a", "ac3", "-ar", "48000", "-ac", "2", "-b:a", "448k", "-af", "apad", "-shortest", "-t", fmt.Sprintf("%.6f", v.Duration), "-f", "dvd", "-muxrate", "10080k", "-packetsize", "2048", output)
 	}
 	return args
 }
@@ -151,28 +162,22 @@ func (t Tools) Encode(ctx context.Context, v model.Video, s model.Settings, inpu
 	if runtime.GOOS == "windows" {
 		null = "NUL"
 	}
-	if s.Encoder() == "HCenc" {
-		if err := t.encodeHCenc(ctx, v, s, input, dir, log, progress); err != nil {
-			return v, err
+	for pass := 1; pass <= 2; pass++ {
+		out := null
+		if pass == 2 {
+			out = part
 		}
-	} else {
-		for pass := 1; pass <= 2; pass++ {
-			out := null
-			if pass == 2 {
-				out = part
-			}
-			p := pass
-			err := process.Run(ctx, t.FFmpeg, EncodeArgs(v, s, input, passlog, out, pass), process.Options{Dir: dir, Log: log, Line: func(line string) {
-				if strings.HasPrefix(line, "out_time_us=") {
-					us, _ := strconv.ParseFloat(strings.TrimPrefix(line, "out_time_us="), 64)
-					if progress != nil {
-						progress(math.Min(1, (float64(p-1)+us/1e6/v.Duration)/2))
-					}
+		p := pass
+		err := process.Run(ctx, t.FFmpeg, EncodeArgs(v, s, input, passlog, out, pass), process.Options{Dir: dir, Log: log, Line: func(line string) {
+			if strings.HasPrefix(line, "out_time_us=") {
+				us, _ := strconv.ParseFloat(strings.TrimPrefix(line, "out_time_us="), 64)
+				if progress != nil {
+					progress(math.Min(1, (float64(p-1)+us/1e6/v.Duration)/2))
 				}
-			}})
-			if err != nil {
-				return v, err
 			}
+		}})
+		if err != nil {
+			return v, err
 		}
 	}
 	// A complete decode catches truncated streams before they become reusable checkpoints.

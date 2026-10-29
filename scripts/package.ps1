@@ -36,8 +36,6 @@ foreach ($file in $documentation) {
     Copy-Item -LiteralPath (Join-Path $ProjectRoot $file) -Destination $target
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'tools.lock.json') -Destination $bundle
-New-Item -ItemType Directory -Force -Path (Join-Path $bundle 'scripts') | Out-Null
-Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'prepare-hcenc.ps1') -Destination (Join-Path $bundle 'scripts')
 $Version | Set-Content -LiteralPath (Join-Path $bundle 'VERSION') -Encoding utf8
 @{version=$Version; repository=(Get-Content -LiteralPath (Join-Path $ProjectRoot 'RELEASE_REPOSITORY') -Raw).Trim(); publicRelease=[bool]$PublicRelease; offline=[bool]$IncludeFFmpeg; authoringToolchain=$ToolLock.authoring.id; commit=(& git -C $ProjectRoot rev-parse --verify HEAD 2>$null)} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $bundle 'release.json') -Encoding utf8
 Use-DevTools

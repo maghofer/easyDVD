@@ -73,9 +73,7 @@ func CLI(args []string) error {
 	ffmpegDir := fs.String("ffmpeg-dir", "", "Use FFmpeg and FFprobe from this folder for this run")
 	downloadFFmpeg := fs.Bool("download-ffmpeg", false, "Download and remember the recommended private FFmpeg installation")
 	resume := fs.Bool("resume", false, "Resume saved queue")
-	workers := fs.Int("encoders", 2, "Parallel encoders (1–4 HCenc, 1–2 FFmpeg)")
-	encoder := fs.String("video-encoder", defaults.Encoder(), "Video encoder: HCenc or FFmpeg")
-	hcencDir := fs.String("hcenc-dir", "", "HCenc folder with 32-bit AviSynth.dll and ffms2.dll")
+	workers := fs.Int("encoders", 2, "Parallel encoders (1–2)")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -125,15 +123,12 @@ func CLI(args []string) error {
 	if *tools {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		selected := defaults
-		selected.VideoEncoder, selected.HCencDir = *encoder, strings.TrimSpace(*hcencDir)
-		statuses := append(t.Check(ctx), t.EncoderStatus(selected))
-		b, _ := json.MarshalIndent(statuses, "", "  ")
+		b, _ := json.MarshalIndent(t.Check(ctx), "", "  ")
 		fmt.Println(string(b))
 		if err := t.Require(); err != nil {
 			return err
 		}
-		return t.RequireEncoder(selected)
+		return nil
 	}
 	if *downloadFFmpeg && fs.NArg() == 0 && !*resume {
 		return t.Require()
@@ -154,8 +149,6 @@ func CLI(args []string) error {
 	defaults.KeepWork = *keep
 	defaults.NoMenu = *noMenu
 	defaults.Encoders = *workers
-	defaults.VideoEncoder = *encoder
-	defaults.HCencDir = strings.TrimSpace(*hcencDir)
 	defaults.TitlesPerPage = *perPage
 	if *efficient {
 		defaults.Packing = "Space efficiency"

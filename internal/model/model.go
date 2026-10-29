@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -30,8 +31,6 @@ type Settings struct {
 	TitlesPerPage int       `json:"titles_per_page"`
 	StageLocally  bool      `json:"stage_locally"`
 	Encoders      int       `json:"encoders"`
-	VideoEncoder  string    `json:"video_encoder,omitempty"`
-	HCencDir      string    `json:"hcenc_dir,omitempty"`
 	OutputDir     string    `json:"output_dir"`
 	WorkDir       string    `json:"work_dir"`
 	Theme         string    `json:"theme"`
@@ -41,16 +40,26 @@ type Settings struct {
 }
 
 func DefaultSettings(base string) Settings {
-	return Settings{Standard: "PAL", Media: "DVD-5", Packing: "Strict order", Layout: "Text", TitlesPerPage: 10, StageLocally: true, Encoders: 2, VideoEncoder: "HCenc", OutputDir: filepath.Join(base, "easyDVD Output"), WorkDir: filepath.Join(base, "easyDVD Work"), Theme: "System", Menu: DefaultMenuStyle()}
+	return Settings{Standard: "PAL", Media: "DVD-5", Packing: "Strict order", Layout: "Text", TitlesPerPage: 10, StageLocally: true, Encoders: 2, OutputDir: filepath.Join(base, "easyDVD Output"), WorkDir: filepath.Join(base, "easyDVD Work"), Theme: "System", Menu: DefaultMenuStyle()}
+}
+
+// Read old preview queues without retaining the removed backend configuration.
+func (s *Settings) UnmarshalJSON(data []byte) error {
+	type settings Settings
+	legacy := struct {
+		*settings
+		VideoEncoder string `json:"video_encoder"`
+	}{settings: (*settings)(s)}
+	if err := json.Unmarshal(data, &legacy); err != nil {
+		return err
+	}
+	if legacy.VideoEncoder == "HCenc" && s.Encoders > 2 {
+		s.Encoders = 2
+	}
+	return nil
 }
 
 func (s Settings) Validate() error {
-	if s.Encoder() != "HCenc" && s.Encoder() != "FFmpeg" {
-		return fmt.Errorf("choose HCenc or FFmpeg as video encoder")
-	}
-	if s.HCencDir != "" && !filepath.IsAbs(s.HCencDir) {
-		return fmt.Errorf("HCenc folder must be an absolute path")
-	}
 	if s.Standard != "PAL" && s.Standard != "NTSC" {
 		return fmt.Errorf("choose PAL or NTSC")
 	}
@@ -70,8 +79,8 @@ func (s Settings) Validate() error {
 	if s.TitlesPerPage < 1 || s.TitlesPerPage > max {
 		return fmt.Errorf("titles per page must be 1–%d for this layout", max)
 	}
-	if s.Encoders < 1 || s.Encoders > s.MaxEncoders() {
-		return fmt.Errorf("use 1–%d encoding workers with %s", s.MaxEncoders(), s.Encoder())
+	if s.Encoders < 1 || s.Encoders > 2 {
+		return fmt.Errorf("use one or two encoding workers")
 	}
 	if !filepath.IsAbs(s.OutputDir) || !filepath.IsAbs(s.WorkDir) {
 		return fmt.Errorf("output and work folders must be absolute paths")
@@ -110,25 +119,7 @@ func (s Settings) GOP() string {
 
 // Only settings affecting an encoded title belong here. Menu edits and packing do not re-encode.
 func (s Settings) EncodingKey() string {
-	if s.VideoEncoder == "" {
-		return Hash("mpeg2-v2-8000-9000-ac3-256-2pass-" + s.Standard)
-	}
-	return Hash("mpeg2-v4-pillarbox-bounds-8000-9000-ac3-256-2pass-" + s.Encoder() + "-" + s.Standard)
-}
-
-// Empty identifies queues saved before encoder selection existed.
-func (s Settings) Encoder() string {
-	if s.VideoEncoder == "" {
-		return "FFmpeg"
-	}
-	return s.VideoEncoder
-}
-
-func (s Settings) MaxEncoders() int {
-	if s.Encoder() == "HCenc" {
-		return 4
-	}
-	return 2
+	return Hash("mpeg2-v5-quality-ceiling-ac3-448-2pass-" + s.Standard)
 }
 
 func (v Video) ArtifactKey(s Settings) string {
@@ -181,7 +172,7 @@ func (v Video) OriginalLabel() string {
 }
 
 func (v Video) Fingerprint() string   { return Hash(fmt.Sprintf("%s:%d:%d", v.Path, v.Size, v.ModTime)) }
-func (v Video) EstimatedBytes() int64 { return int64(v.Duration * 8256000 / 8 * 1.035) }
+func (v Video) EstimatedBytes() int64 { return int64(v.Duration * 9448000 / 8 * 1.035) }
 func (v Video) Aspect() string {
 	if v.ContentDAR() >= 1.55 {
 		return "16:9"

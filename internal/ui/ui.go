@@ -424,28 +424,8 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 	if !s.NoMenu && (id == "" || u.selectedJob() == nil || len(u.selectedJob().ActiveVideos()) != 1) {
 		noMenu.Disable()
 	}
-	workerOptions := []string{"1", "2"}
-	if s.Encoder() == "HCenc" {
-		workerOptions = append(workerOptions, "3", "4")
-	}
-	workers := widget.NewSelect(workerOptions, nil)
+	workers := widget.NewSelect([]string{"1", "2"}, nil)
 	workers.SetSelected(strconv.Itoa(s.Encoders))
-	encoder := widget.NewSelect([]string{"HCenc", "FFmpeg"}, nil)
-	encoder.SetSelected(s.Encoder())
-	encoder.OnChanged = func(value string) {
-		count, _ := strconv.Atoi(workers.Selected)
-		options := []string{"1", "2"}
-		if value == "HCenc" {
-			options = append(options, "3", "4")
-		} else if count > 2 {
-			count = 2
-		}
-		workers.SetOptions(options)
-		workers.SetSelected(strconv.Itoa(max(1, count)))
-	}
-	hcencFolder := widget.NewEntry()
-	hcencFolder.SetText(s.HCencDir)
-	hcencFolder.SetPlaceHolder("Choose the HCenc installation folder, or leave blank for automatic detection")
 	output := widget.NewEntry()
 	output.SetText(s.OutputDir)
 	work := widget.NewEntry()
@@ -466,13 +446,11 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 	appearance.SetSelected(s.Theme)
 	form := widget.NewForm(widget.NewFormItem("TV standard", standard), widget.NewFormItem("Disc capacity", medium), widget.NewFormItem("File allocation", packingMode), widget.NewFormItem("Menu layout", menuLayout), widget.NewFormItem("Titles per page", perPage), widget.NewFormItem("Encoding workers", workers), widget.NewFormItem("Output folder", folder(output)), widget.NewFormItem("Local work folder", folder(work)), widget.NewFormItem("Appearance", appearance))
 	form.Append("Playback", noMenu)
-	form.Append("Video encoder", encoder)
-	form.Append("HCenc folder", folder(hcencFolder))
 	note := "Applies to new and pending jobs. Started jobs retain their settings."
 	if id != "" {
 		note = "Settings for this folder. Locked when processing starts."
 	}
-	heading := widget.NewLabel(note + "\nQuality: two-pass MPEG-2, 8 Mbps average / 9 Mbps peak.")
+	heading := widget.NewLabel(note + "\nQuality: two-pass MPEG-2, 9 Mbps target / peak, AC-3 448 kbps.")
 	heading.Wrapping = fyne.TextWrapWord
 	var d dialog.Dialog
 	save := func() {
@@ -488,8 +466,6 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 		next.Layout = menuLayout.Selected
 		next.TitlesPerPage = n
 		next.Encoders, _ = strconv.Atoi(workers.Selected)
-		next.VideoEncoder = encoder.Selected
-		next.HCencDir = strings.TrimSpace(hcencFolder.Text)
 		next.StageLocally = stage.Checked
 		next.KeepWork = keep.Checked
 		next.NoMenu = noMenu.Checked
@@ -548,7 +524,6 @@ func (u *window) diagnostics() {
 		defer cancel()
 		tools := u.engine.Tools()
 		statuses := tools.Check(ctx)
-		statuses = append(statuses, tools.EncoderStatus(u.engine.Snapshot().Settings))
 		var text strings.Builder
 		for _, s := range statuses {
 			fmt.Fprintf(&text, "%s\n%s\n%s\n", s.Name, s.Path, s.Version)
