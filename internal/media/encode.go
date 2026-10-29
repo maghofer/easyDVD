@@ -110,15 +110,20 @@ func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, 
 	if threads > 8 {
 		threads = 8
 	}
-	// Use the DVD target's conservative peak for the average too: packing adds
-	// discs instead of lowering quality. qmin AND lmin permit quantizer 1;
-	// raising the bitrate alone leaves easy material capped at quantizer 2.
+	// Balanced retains the old quantizer floor to avoid spending unnecessary
+	// bits on easy material. Quality allows finer quantization and adds the
+	// costly searches. Both keep inexpensive RD macroblock decisions.
 	args = append(args, "-map", fmt.Sprintf("0:%d", v.VideoStream), "-vf", filter,
 		"-c:v", "mpeg2video", "-profile:v", "4", "-level:v", "8", "-pix_fmt", "yuv420p",
-		"-b:v", "9000k", "-maxrate:v", "9000k", "-minrate:v", "0", "-bufsize:v", "1835008",
-		"-qmin", "1", "-lmin", "118", "-mbd", "rd", "-trellis", "1", "-intra_vlc", "1",
-		"-cmp", "satd", "-subcmp", "satd", "-mepre", "1", "-precmp", "satd",
-		"-dia_size", "2", "-pre_dia_size", "2", "-last_pred", "3", "-bidir_refine", "2", "-mpv_flags", "+mv0+cbp_rd",
+		"-b:v", fmt.Sprintf("%dk", s.VideoBitrate()/1000), "-maxrate:v", "9000k", "-minrate:v", "0", "-bufsize:v", "1835008",
+		"-mbd", "rd", "-intra_vlc", "1")
+	if s.Profile() == model.ProfileQuality {
+		args = append(args, "-qmin", "1", "-lmin", "118", "-trellis", "1", "-cmp", "satd", "-subcmp", "satd", "-mepre", "1", "-precmp", "satd",
+			"-dia_size", "2", "-pre_dia_size", "2", "-last_pred", "3", "-bidir_refine", "2", "-mpv_flags", "+mv0+cbp_rd")
+	} else {
+		args = append(args, "-qmin", "2", "-lmin", "236")
+	}
+	args = append(args,
 		"-g", s.GOP(), "-bf", "2", "-flags", flags, "-sc_threshold", "1000000000", "-dc", "10",
 		"-aspect", v.Aspect(), "-threads", strconv.Itoa(threads), "-pass", strconv.Itoa(pass), "-passlogfile", passlog,
 		"-sn", "-dn", "-progress", "pipe:1", "-nostats")
@@ -141,7 +146,7 @@ func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, 
 		if v.AudioStream < 0 {
 			audio = "1:a:0"
 		}
-		args = append(args, "-map", audio, "-c:a", "ac3", "-ar", "48000", "-ac", "2", "-b:a", "448k", "-af", "apad", "-shortest", "-t", fmt.Sprintf("%.6f", v.Duration), "-f", "dvd", "-muxrate", "10080k", "-packetsize", "2048", output)
+		args = append(args, "-map", audio, "-c:a", "ac3", "-ar", "48000", "-ac", "2", "-b:a", fmt.Sprintf("%dk", s.AudioBitrate()/1000), "-af", "apad", "-shortest", "-t", fmt.Sprintf("%.6f", v.Duration), "-f", "dvd", "-muxrate", "10080k", "-packetsize", "2048", output)
 	}
 	return args
 }

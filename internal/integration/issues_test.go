@@ -12,10 +12,54 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestScopeFillsDVDWidth(t *testing.T) {
+	tools, ctx := issueTools(t)
+	dir := t.TempDir()
+	source := filepath.Join(dir, "scope.mp4")
+	filter := "testsrc2=s=1920x796:r=24,drawbox=x=0:y=0:w=16:h=ih:color=white:t=fill,drawbox=x=iw-16:y=0:w=16:h=ih:color=white:t=fill"
+	if err := process.Run(ctx, tools.FFmpeg, []string{"-v", "error", "-y", "-f", "lavfi", "-i", filter, "-t", "2", "-c:v", "libx264", source}, process.Options{}); err != nil {
+		t.Fatal(err)
+	}
+	original, err := tools.Probe(ctx, source, "scope.mp4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, profile := range []string{model.ProfileBalanced, model.ProfileQuality} {
+		for _, standard := range []string{"PAL", "NTSC"} {
+			t.Run(profile+"/"+standard, func(t *testing.T) {
+				s := model.DefaultSettings(dir)
+				s.EncodingProfile, s.Standard, s.Encoders = profile, standard, 1
+				v, err := tools.Encode(ctx, original, s, source, filepath.Join(dir, profile+standard), nil, nil)
+				if err != nil {
+					t.Fatal(err)
+				}
+				out, err := tools.Probe(ctx, v.Encoded, "out.mpg")
+				if err != nil || out.Aspect() != "16:9" || out.Width != 720 || out.Height != s.Height() {
+					t.Fatal(out, err)
+				}
+				var evidence bytes.Buffer
+				if err = process.Run(ctx, tools.FFmpeg, []string{"-hide_banner", "-i", v.Encoded, "-vf", "bbox=min_val=32", "-an", "-f", "null", "-"}, process.Options{Log: &evidence}); err != nil {
+					t.Fatal(err)
+				}
+				matches := regexp.MustCompile(`crop=(\d+):\d+:(\d+):\d+`).FindAllStringSubmatch(evidence.String(), -1)
+				if len(matches) == 0 {
+					t.Fatal("no visible-picture evidence", evidence.String())
+				}
+				for _, bounds := range matches {
+					if bounds[1] != "720" || bounds[2] != "0" {
+						t.Fatal("scope encoding introduced side borders", bounds)
+					}
+				}
+			})
+		}
+	}
+}
 
 func issueTools(t *testing.T) (media.Tools, context.Context) {
 	t.Helper()

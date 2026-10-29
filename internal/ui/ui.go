@@ -76,6 +76,8 @@ type window struct {
 	headerInfo, jobHeader                                            *fyne.Container
 	jobSummary, jobState, activity                                   *widget.Label
 	headerToggle, jobWarning, clear                                  *widget.Button
+	profileToggle                                                    *widget.RadioGroup
+	profileSync                                                      bool
 	details                                                          *fyne.Container
 	empty                                                            *fyne.Container
 	start, pause, cancel, retry, settings, preview, remove, up, down *widget.Button
@@ -426,6 +428,8 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 	}
 	workers := widget.NewSelect([]string{"1", "2"}, nil)
 	workers.SetSelected(strconv.Itoa(s.Encoders))
+	profile := widget.NewSelect([]string{model.ProfileBalanced, model.ProfileQuality}, nil)
+	profile.SetSelected(s.Profile())
 	output := widget.NewEntry()
 	output.SetText(s.OutputDir)
 	work := widget.NewEntry()
@@ -446,11 +450,12 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 	appearance.SetSelected(s.Theme)
 	form := widget.NewForm(widget.NewFormItem("TV standard", standard), widget.NewFormItem("Disc capacity", medium), widget.NewFormItem("File allocation", packingMode), widget.NewFormItem("Menu layout", menuLayout), widget.NewFormItem("Titles per page", perPage), widget.NewFormItem("Encoding workers", workers), widget.NewFormItem("Output folder", folder(output)), widget.NewFormItem("Local work folder", folder(work)), widget.NewFormItem("Appearance", appearance))
 	form.Append("Playback", noMenu)
+	form.Append("Encoding profile", profile)
 	note := "Applies to new and pending jobs. Started jobs retain their settings."
 	if id != "" {
 		note = "Settings for this folder. Locked when processing starts."
 	}
-	heading := widget.NewLabel(note + "\nQuality: two-pass MPEG-2, 9 Mbps target / peak, AC-3 448 kbps.")
+	heading := widget.NewLabel(note + "\nBalanced: faster encoding and smaller files. Quality: higher bitrate and more detailed analysis.")
 	heading.Wrapping = fyne.TextWrapWord
 	var d dialog.Dialog
 	save := func() {
@@ -466,6 +471,7 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 		next.Layout = menuLayout.Selected
 		next.TitlesPerPage = n
 		next.Encoders, _ = strconv.Atoi(workers.Selected)
+		next.EncodingProfile = profile.Selected
 		next.StageLocally = stage.Checked
 		next.KeepWork = keep.Checked
 		next.NoMenu = noMenu.Checked

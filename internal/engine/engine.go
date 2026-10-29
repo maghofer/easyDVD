@@ -386,7 +386,7 @@ func (e *Engine) estimateLocked(j *model.Job) {
 	var items []packing.Item
 	for i, v := range j.Videos {
 		if !v.Excluded && v.Error == "" {
-			items = append(items, packing.Item{ID: v.ID, Bytes: v.EstimatedBytes(), Order: i})
+			items = append(items, packing.Item{ID: v.ID, Bytes: v.EstimatedBytes(j.Settings), Order: i})
 		}
 	}
 	r, err := packing.Plan(context.Background(), items, j.Settings.Capacity(), j.Settings.Packing == "Space efficiency", 0)
@@ -886,7 +886,7 @@ func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) err
 	var remaining, stage int64
 	for _, v := range videos {
 		if v.Encoded == "" {
-			remaining += v.EstimatedBytes()
+			remaining += v.EstimatedBytes(s)
 		}
 		if v.Size > stage {
 			stage = v.Size

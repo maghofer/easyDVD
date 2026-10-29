@@ -1,5 +1,8 @@
 # FFmpeg-only DVD quality — 2026-10-29
 
+The profile below is now selectable as Quality; Balanced is the new-job default.
+See [the profile comparison and Scope investigation](BALANCED-SCOPE-2026-10-29.md).
+
 HCenc, its AviSynth/FFMS2 preparation path, setup script, settings, CLI flags,
 benchmark candidates and CI installation have been removed. FFmpeg/FFprobe
 remain external in the normal portable package. The only bundled executables

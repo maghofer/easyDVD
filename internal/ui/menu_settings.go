@@ -54,7 +54,7 @@ func (u *window) menuSettings(id string) fyne.Window {
 		var items []packing.Item
 		for i, v := range job.Videos {
 			if !v.Excluded && v.Error == "" {
-				items = append(items, packing.Item{ID: v.ID, Bytes: v.EstimatedBytes(), Order: i})
+				items = append(items, packing.Item{ID: v.ID, Bytes: v.EstimatedBytes(base), Order: i})
 			}
 		}
 		if plan, err := packing.Plan(ctx, items, base.Capacity(), base.Packing == "Space efficiency", 0); err == nil {

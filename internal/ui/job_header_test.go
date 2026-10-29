@@ -75,6 +75,34 @@ func TestJobHeaderProgressFollowsActivity(t *testing.T) {
 	}
 }
 
+func TestJobHeaderProfilePersistsAndLocks(t *testing.T) {
+	u := fileListFixture(t)
+	if u.profileToggle.Selected != model.ProfileBalanced || u.profileToggle.Disabled() {
+		t.Fatal("Balanced toggle is not available")
+	}
+	u.profileToggle.SetSelected(model.ProfileQuality)
+	deadline := time.Now().Add(3 * time.Second)
+	for u.engine.Snapshot().Jobs[0].Settings.Profile() != model.ProfileQuality {
+		if time.Now().After(deadline) {
+			t.Fatal("job profile was not saved")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if u.engine.Snapshot().Settings.Profile() != model.ProfileBalanced {
+		t.Fatal("job toggle changed defaults")
+	}
+	u.snapshot = u.engine.Snapshot()
+	u.refresh()
+	if u.profileToggle.Selected != model.ProfileQuality {
+		t.Fatal("refresh lost the selected profile")
+	}
+	u.snapshot.Jobs[0].Locked = true
+	u.refresh()
+	if !u.profileToggle.Disabled() {
+		t.Fatal("started job still allows profile changes")
+	}
+}
+
 func TestClearQueueConfirmationAndEmptyState(t *testing.T) {
 	u := fileListFixture(t)
 	u.setFileSelected("0", true)

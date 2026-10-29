@@ -1,0 +1,1030 @@
+{
+  "date": "2026-10-29",
+  "host": "Windows; Ryzen 7 9800X3D; 8 cores / 16 logical CPUs",
+  "ffmpeg": "9.0.2",
+  "method": "Prepared 20-second progressive PAL reference scenes; two MPEG-2 passes, eight threads. Movement and grain share an H.264 film source; ProRes and Scope are separate sources. Objective metrics use identical SD reference frames. Timings exclude reference preparation and metrics. Production trials run sequentially with original decoding/scaling, audio/mux, full decode and hashing.",
+  "sweep": [
+    {
+      "scene": "movement",
+      "profile": "old8",
+      "options": [
+        "-b:v",
+        "8000k"
+      ],
+      "seconds": 0.4015609999996741,
+      "failed": false,
+      "bytes": 16841715,
+      "mbps": 6.736686,
+      "vbv_diagnostics": [],
+      "ssim": 0.973753,
+      "psnr": 43.899443,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "movement",
+      "profile": "fast8-vlc",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-intra_vlc",
+        "1"
+      ],
+      "seconds": 0.39616250000017317,
+      "failed": false,
+      "bytes": 16804450,
+      "mbps": 6.72178,
+      "vbv_diagnostics": [],
+      "ssim": 0.973753,
+      "psnr": 43.899442,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "movement",
+      "profile": "fast7-q1-vlc",
+      "options": [
+        "-b:v",
+        "7000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1"
+      ],
+      "seconds": 0.40140080000037415,
+      "failed": false,
+      "bytes": 17480952,
+      "mbps": 6.992380799999999,
+      "vbv_diagnostics": [],
+      "ssim": 0.974091,
+      "psnr": 43.951347,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "movement",
+      "profile": "fast7-mbd2",
+      "options": [
+        "-b:v",
+        "7000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.6972975999997288,
+      "failed": false,
+      "bytes": 17444746,
+      "mbps": 6.9778984,
+      "vbv_diagnostics": [],
+      "ssim": 0.975224,
+      "psnr": 44.147454,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "movement",
+      "profile": "fast7-trellis",
+      "options": [
+        "-b:v",
+        "7000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-trellis",
+        "1"
+      ],
+      "seconds": 0.9812071999995169,
+      "failed": false,
+      "bytes": 17558208,
+      "mbps": 7.0232832,
+      "vbv_diagnostics": [],
+      "ssim": 0.974428,
+      "psnr": 44.054014,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "movement",
+      "profile": "fast8-q1-vlc",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1"
+      ],
+      "seconds": 0.41513599999962025,
+      "failed": false,
+      "bytes": 19997055,
+      "mbps": 7.998822,
+      "vbv_diagnostics": [],
+      "ssim": 0.975656,
+      "psnr": 44.240289,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "movement",
+      "profile": "quality9",
+      "options": [
+        "-b:v",
+        "9000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-mbd",
+        "rd",
+        "-trellis",
+        "1",
+        "-intra_vlc",
+        "1",
+        "-cmp",
+        "satd",
+        "-subcmp",
+        "satd",
+        "-mepre",
+        "1",
+        "-precmp",
+        "satd",
+        "-dia_size",
+        "2",
+        "-pre_dia_size",
+        "2",
+        "-last_pred",
+        "3",
+        "-bidir_refine",
+        "2",
+        "-mpv_flags",
+        "+mv0+cbp_rd"
+      ],
+      "seconds": 3.7731089999997494,
+      "failed": false,
+      "bytes": 22338482,
+      "mbps": 8.9353928,
+      "vbv_diagnostics": [],
+      "ssim": 0.97946,
+      "psnr": 45.0455,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "grain",
+      "profile": "old8",
+      "options": [
+        "-b:v",
+        "8000k"
+      ],
+      "seconds": 0.44330360000003566,
+      "failed": false,
+      "bytes": 19519866,
+      "mbps": 7.8079464000000005,
+      "vbv_diagnostics": [],
+      "ssim": 0.976103,
+      "psnr": 44.121851,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "grain",
+      "profile": "fast8-vlc",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-intra_vlc",
+        "1"
+      ],
+      "seconds": 0.4519630999993751,
+      "failed": false,
+      "bytes": 19452127,
+      "mbps": 7.7808508,
+      "vbv_diagnostics": [],
+      "ssim": 0.976177,
+      "psnr": 44.139846,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "grain",
+      "profile": "fast7-q1-vlc",
+      "options": [
+        "-b:v",
+        "7000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1"
+      ],
+      "seconds": 0.44293500000003405,
+      "failed": false,
+      "bytes": 17560688,
+      "mbps": 7.0242752,
+      "vbv_diagnostics": [],
+      "ssim": 0.973275,
+      "psnr": 43.554472,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "grain",
+      "profile": "fast7-mbd2",
+      "options": [
+        "-b:v",
+        "7000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7322054000005664,
+      "failed": false,
+      "bytes": 17525514,
+      "mbps": 7.0102056,
+      "vbv_diagnostics": [],
+      "ssim": 0.975241,
+      "psnr": 43.884637,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "grain",
+      "profile": "fast7-trellis",
+      "options": [
+        "-b:v",
+        "7000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-trellis",
+        "1"
+      ],
+      "seconds": 0.9009264999995139,
+      "failed": false,
+      "bytes": 17522566,
+      "mbps": 7.009026400000001,
+      "vbv_diagnostics": [],
+      "ssim": 0.974274,
+      "psnr": 43.783861,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "grain",
+      "profile": "fast8-q1-vlc",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1"
+      ],
+      "seconds": 0.4525372000007337,
+      "failed": false,
+      "bytes": 19984743,
+      "mbps": 7.9938972,
+      "vbv_diagnostics": [],
+      "ssim": 0.976228,
+      "psnr": 44.112821,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "grain",
+      "profile": "quality9",
+      "options": [
+        "-b:v",
+        "9000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-mbd",
+        "rd",
+        "-trellis",
+        "1",
+        "-intra_vlc",
+        "1",
+        "-cmp",
+        "satd",
+        "-subcmp",
+        "satd",
+        "-mepre",
+        "1",
+        "-precmp",
+        "satd",
+        "-dia_size",
+        "2",
+        "-pre_dia_size",
+        "2",
+        "-last_pred",
+        "3",
+        "-bidir_refine",
+        "2",
+        "-mpv_flags",
+        "+mv0+cbp_rd"
+      ],
+      "seconds": 3.588476200000514,
+      "failed": false,
+      "bytes": 22474247,
+      "mbps": 8.989698800000001,
+      "vbv_diagnostics": [],
+      "ssim": 0.980747,
+      "psnr": 45.113819,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "prores",
+      "profile": "old8",
+      "options": [
+        "-b:v",
+        "8000k"
+      ],
+      "seconds": 0.3616394999999102,
+      "failed": false,
+      "bytes": 10957536,
+      "mbps": 4.3830144,
+      "vbv_diagnostics": [],
+      "ssim": 0.981661,
+      "psnr": 45.631881,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "prores",
+      "profile": "fast8-vlc",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-intra_vlc",
+        "1"
+      ],
+      "seconds": 0.3608921000004557,
+      "failed": false,
+      "bytes": 10957242,
+      "mbps": 4.3828968,
+      "vbv_diagnostics": [],
+      "ssim": 0.981661,
+      "psnr": 45.631818,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "prores",
+      "profile": "fast7-q1-vlc",
+      "options": [
+        "-b:v",
+        "7000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1"
+      ],
+      "seconds": 0.38625409999986005,
+      "failed": false,
+      "bytes": 17652752,
+      "mbps": 7.0611008,
+      "vbv_diagnostics": [],
+      "ssim": 0.985762,
+      "psnr": 46.883719,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "prores",
+      "profile": "fast7-mbd2",
+      "options": [
+        "-b:v",
+        "7000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.6738470999998754,
+      "failed": false,
+      "bytes": 17656199,
+      "mbps": 7.0624796,
+      "vbv_diagnostics": [],
+      "ssim": 0.986646,
+      "psnr": 47.16341,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "prores",
+      "profile": "fast7-trellis",
+      "options": [
+        "-b:v",
+        "7000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-trellis",
+        "1"
+      ],
+      "seconds": 0.928988699999536,
+      "failed": false,
+      "bytes": 17578983,
+      "mbps": 7.0315932000000005,
+      "vbv_diagnostics": [],
+      "ssim": 0.987131,
+      "psnr": 47.463437,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "prores",
+      "profile": "fast8-q1-vlc",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1"
+      ],
+      "seconds": 0.39685949999966397,
+      "failed": false,
+      "bytes": 20007586,
+      "mbps": 8.0030344,
+      "vbv_diagnostics": [],
+      "ssim": 0.987213,
+      "psnr": 47.435251,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "prores",
+      "profile": "quality9",
+      "options": [
+        "-b:v",
+        "9000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-mbd",
+        "rd",
+        "-trellis",
+        "1",
+        "-intra_vlc",
+        "1",
+        "-cmp",
+        "satd",
+        "-subcmp",
+        "satd",
+        "-mepre",
+        "1",
+        "-precmp",
+        "satd",
+        "-dia_size",
+        "2",
+        "-pre_dia_size",
+        "2",
+        "-last_pred",
+        "3",
+        "-bidir_refine",
+        "2",
+        "-mpv_flags",
+        "+mv0+cbp_rd"
+      ],
+      "seconds": 3.89727430000039,
+      "failed": false,
+      "bytes": 22189443,
+      "mbps": 8.8757772,
+      "vbv_diagnostics": [],
+      "ssim": 0.989908,
+      "psnr": 48.609096,
+      "experiment": "sweep"
+    },
+    {
+      "scene": "movement",
+      "profile": "rd75",
+      "options": [
+        "-b:v",
+        "7500k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7510263000003761,
+      "failed": false,
+      "bytes": 18719952,
+      "mbps": 7.4879808,
+      "vbv_diagnostics": [],
+      "ssim": 0.976121,
+      "psnr": 44.322003,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "movement",
+      "profile": "rd8",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7356224000004659,
+      "failed": false,
+      "bytes": 19989823,
+      "mbps": 7.9959292,
+      "vbv_diagnostics": [],
+      "ssim": 0.976927,
+      "psnr": 44.479243,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "movement",
+      "profile": "rd75-q2",
+      "options": [
+        "-b:v",
+        "7500k",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.684084299999995,
+      "failed": false,
+      "bytes": 16445601,
+      "mbps": 6.5782404,
+      "vbv_diagnostics": [],
+      "ssim": 0.974568,
+      "psnr": 44.03442,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "grain",
+      "profile": "rd75",
+      "options": [
+        "-b:v",
+        "7500k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7533062000002246,
+      "failed": false,
+      "bytes": 18741396,
+      "mbps": 7.4965584000000005,
+      "vbv_diagnostics": [],
+      "ssim": 0.976854,
+      "psnr": 44.210477,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "grain",
+      "profile": "rd8",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7709679999998116,
+      "failed": false,
+      "bytes": 20021094,
+      "mbps": 8.008437599999999,
+      "vbv_diagnostics": [],
+      "ssim": 0.977994,
+      "psnr": 44.466489,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "grain",
+      "profile": "rd75-q2",
+      "options": [
+        "-b:v",
+        "7500k",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7504422000001796,
+      "failed": false,
+      "bytes": 18751566,
+      "mbps": 7.500626400000001,
+      "vbv_diagnostics": [],
+      "ssim": 0.977127,
+      "psnr": 44.297937,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "prores",
+      "profile": "rd75",
+      "options": [
+        "-b:v",
+        "7500k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7594981000002008,
+      "failed": false,
+      "bytes": 18793979,
+      "mbps": 7.517591599999999,
+      "vbv_diagnostics": [],
+      "ssim": 0.987498,
+      "psnr": 47.503099,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "prores",
+      "profile": "rd8",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7195220999992671,
+      "failed": false,
+      "bytes": 20051868,
+      "mbps": 8.0207472,
+      "vbv_diagnostics": [],
+      "ssim": 0.988214,
+      "psnr": 47.792364,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "prores",
+      "profile": "rd75-q2",
+      "options": [
+        "-b:v",
+        "7500k",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.5944079000000784,
+      "failed": false,
+      "bytes": 10988463,
+      "mbps": 4.3953852,
+      "vbv_diagnostics": [],
+      "ssim": 0.982153,
+      "psnr": 45.752347,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "scope",
+      "profile": "rd75",
+      "options": [
+        "-b:v",
+        "7500k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7336996000003637,
+      "failed": false,
+      "bytes": 18813809,
+      "mbps": 7.5255236,
+      "vbv_diagnostics": [],
+      "ssim": 0.994371,
+      "psnr": 50.140599,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "scope",
+      "profile": "rd8",
+      "options": [
+        "-b:v",
+        "8000k",
+        "-qmin",
+        "1",
+        "-lmin",
+        "118",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.7717363000001569,
+      "failed": false,
+      "bytes": 20074744,
+      "mbps": 8.0298976,
+      "vbv_diagnostics": [],
+      "ssim": 0.994605,
+      "psnr": 50.402778,
+      "experiment": "sweep-extra"
+    },
+    {
+      "scene": "scope",
+      "profile": "rd75-q2",
+      "options": [
+        "-b:v",
+        "7500k",
+        "-intra_vlc",
+        "1",
+        "-mbd",
+        "rd"
+      ],
+      "seconds": 0.5474371000000247,
+      "failed": false,
+      "bytes": 7720667,
+      "mbps": 3.0882668,
+      "vbv_diagnostics": [],
+      "ssim": 0.989863,
+      "psnr": 47.077304,
+      "experiment": "sweep-extra"
+    }
+  ],
+  "production_60s": {
+    "balanced": {
+      "profile": "Balanced",
+      "repeats": 3,
+      "logical_cpus": 16,
+      "results": [
+        {
+          "Run": 1,
+          "Status": "authored",
+          "Seconds": 2.9423496,
+          "CPUSeconds": 32.5625,
+          "CPUPercent": 69.16772398494047,
+          "EncodingSeconds": 2.7535664,
+          "EncodingCPUPercent": 71.42725430554353,
+          "EncodingFPS": 544.7480765308583,
+          "Bytes": 54033007,
+          "PSNR": "44.005520",
+          "SSIM": "0.974649",
+          "MPGBytes": 56985600
+        },
+        {
+          "Run": 2,
+          "Status": "authored",
+          "Seconds": 2.9825226000000002,
+          "CPUSeconds": 31.984375,
+          "CPUPercent": 67.02458641889251,
+          "EncodingSeconds": 2.7931628,
+          "EncodingCPUPercent": 68.63159524750938,
+          "EncodingFPS": 537.0256255739909,
+          "Bytes": 54033007,
+          "PSNR": "44.005520",
+          "SSIM": "0.974649",
+          "MPGBytes": 56985600
+        },
+        {
+          "Run": 3,
+          "Status": "authored",
+          "Seconds": 2.9621141,
+          "CPUSeconds": 31.90625,
+          "CPUPercent": 67.32153312392659,
+          "EncodingSeconds": 2.773705,
+          "EncodingCPUPercent": 69.42992315332741,
+          "EncodingFPS": 540.7929105654711,
+          "Bytes": 54033007,
+          "PSNR": "44.005520",
+          "SSIM": "0.974649",
+          "MPGBytes": 56985600
+        }
+      ]
+    },
+    "quality": {
+      "profile": "Quality",
+      "repeats": 3,
+      "logical_cpus": 16,
+      "results": [
+        {
+          "Run": 1,
+          "Status": "authored",
+          "Seconds": 12.45991,
+          "CPUSeconds": 92.640625,
+          "CPUPercent": 46.469348996100294,
+          "EncodingSeconds": 12.2584595,
+          "EncodingCPUPercent": 46.42839705919002,
+          "EncodingFPS": 122.36447817933403,
+          "Bytes": 67357990,
+          "PSNR": "44.733858",
+          "SSIM": "0.978375",
+          "MPGBytes": 71954432
+        },
+        {
+          "Run": 2,
+          "Status": "authored",
+          "Seconds": 12.4665742,
+          "CPUSeconds": 92.515625,
+          "CPUPercent": 46.38184050996143,
+          "EncodingSeconds": 12.2700853,
+          "EncodingCPUPercent": 46.51970767065491,
+          "EncodingFPS": 122.24853889157559,
+          "Bytes": 67365343,
+          "PSNR": "44.742265",
+          "SSIM": "0.978390",
+          "MPGBytes": 71946240
+        },
+        {
+          "Run": 3,
+          "Status": "authored",
+          "Seconds": 12.5498141,
+          "CPUSeconds": 93.15625,
+          "CPUPercent": 46.393241992325606,
+          "EncodingSeconds": 12.349950799999998,
+          "EncodingCPUPercent": 46.511445414017366,
+          "EncodingFPS": 121.45797374350676,
+          "Bytes": 67351073,
+          "PSNR": "44.737096",
+          "SSIM": "0.978365",
+          "MPGBytes": 71936000
+        }
+      ]
+    }
+  },
+  "limitations": [
+    "Single observations per sweep candidate; production timings are three repeats per profile.",
+    "Quality metrics support the source-specific selection rather than a universal subjective guarantee.",
+    "No physical DVD player was tested."
+  ],
+  "full_scope": {
+    "Balanced": {
+      "source_duration": 422.125,
+      "crop_left": 0,
+      "crop_right": 0,
+      "mpg_video": {
+        "profile": "Main",
+        "width": 720,
+        "height": 576,
+        "sample_aspect_ratio": "64:45",
+        "display_aspect_ratio": "16:9",
+        "level": 8,
+        "side_data_list": [
+          {}
+        ]
+      },
+      "dvd_streams": [
+        {
+          "codec_name": "mpeg2video",
+          "sample_aspect_ratio": "64:45",
+          "display_aspect_ratio": "16:9",
+          "side_data_list": [
+            {}
+          ]
+        },
+        {
+          "codec_name": "ac3",
+          "sample_rate": "48000",
+          "bit_rate": "256000"
+        }
+      ],
+      "dvd_duration": 422.12,
+      "iso_bytes": 162930688,
+      "iso_sha256": "fa193f1b3adedb8e8bab7ee12e42b25e2c1f67e3997fb5a5ef1e9a2d24708336",
+      "dvd_decode_exit_code": 0,
+      "visible_bounds_at_20s": [
+        717,
+        424,
+        2,
+        76
+      ]
+    },
+    "Quality": {
+      "source_duration": 422.125,
+      "crop_left": 0,
+      "crop_right": 0,
+      "mpg_video": {
+        "profile": "Main",
+        "width": 720,
+        "height": 576,
+        "sample_aspect_ratio": "64:45",
+        "display_aspect_ratio": "16:9",
+        "level": 8,
+        "side_data_list": [
+          {}
+        ]
+      },
+      "dvd_streams": [
+        {
+          "codec_name": "mpeg2video",
+          "sample_aspect_ratio": "64:45",
+          "display_aspect_ratio": "16:9",
+          "side_data_list": [
+            {}
+          ]
+        },
+        {
+          "codec_name": "ac3",
+          "sample_rate": "48000",
+          "bit_rate": "448000"
+        }
+      ],
+      "dvd_duration": 422.12,
+      "iso_bytes": 317564928,
+      "iso_sha256": "f6a9a1a71213ac71f05de638354b5e36a72c5c26047fe31a402efeb2b43302a4",
+      "dvd_decode_exit_code": 0,
+      "visible_bounds_at_20s": [
+        717,
+        424,
+        2,
+        76
+      ]
+    }
+  },
+  "screenshot_measurements": [
+    {
+      "window": [
+        1872,
+        966
+      ],
+      "picture_bounds": [
+        2,
+        95,
+        1870,
+        871
+      ]
+    },
+    {
+      "window": [
+        1869,
+        967
+      ],
+      "picture_bounds": [
+        76,
+        127,
+        1797,
+        843
+      ]
+    }
+  ],
+  "selected_sweep_profile": "rd75-q2",
+  "profile_settings": {
+    "Balanced": {
+      "target_bps": 7500000,
+      "peak_bps": 9000000,
+      "audio_bps": 256000,
+      "qmin": 2,
+      "lmin": 236,
+      "options": [
+        "-mbd",
+        "rd",
+        "-intra_vlc",
+        "1"
+      ]
+    },
+    "Quality": {
+      "target_bps": 9000000,
+      "peak_bps": 9000000,
+      "audio_bps": 448000,
+      "qmin": 1,
+      "lmin": 118,
+      "analysis": "Unchanged full Quality profile"
+    }
+  },
+  "experimental_note": "The qmin=1/lmin=118 Balanced candidate used 384137216 ISO bytes on the complete Scope film versus 317564928 for Quality. The selected qmin=2/lmin=236 avoids those unnecessary bits on clean material; selected Balanced Scope ISO is 162930688 bytes."
+}

@@ -49,6 +49,7 @@ type Report struct {
 	Reference       string
 	ReferenceSHA256 string
 	Standard        string
+	Profile         string
 	Duration        float64
 	Tools           []media.ToolStatus
 	Results         []Result
@@ -72,6 +73,7 @@ func run() error {
 	input := flag.String("input", "", "Representative source video")
 	output := flag.String("output", "", "New directory for references, encoded samples, ISOs and report")
 	standard := flag.String("standard", "PAL", "PAL or NTSC")
+	profile := flag.String("profile", model.ProfileBalanced, "Balanced or Quality production encoding")
 	seconds := flag.Float64("seconds", 10, "Maximum sample duration")
 	offset := flag.Float64("offset", 0, "Start time in seconds for the sample")
 	repeats := flag.Int("repeats", 1, "Number of sequential production encoder runs")
@@ -102,6 +104,7 @@ func run() error {
 	}
 	s := model.DefaultSettings(dir)
 	s.Standard = *standard
+	s.EncodingProfile = *profile
 	s.WorkDir = filepath.Join(dir, "work")
 	s.OutputDir = filepath.Join(dir, "output")
 	s.Encoders = 1
@@ -157,11 +160,11 @@ func run() error {
 	if original.Aspect() == "16:9" {
 		ref.DAR = 16.0 / 9
 	}
-	report := Report{Source: source, Reference: reference, Standard: s.Standard, Duration: duration, Tools: tools.Check(ctx),
+	report := Report{Source: source, Reference: reference, Standard: s.Standard, Profile: s.Profile(), Duration: duration, Tools: tools.Check(ctx),
 		LogicalCPUs: runtime.NumCPU(), Repeats: *repeats, Preparation: preparation,
 		InputMode: "DVD-resolution prepared progressive reference",
 		Notes: []string{
-			"The production two-pass FFmpeg profile targets 9 Mbps video with a 9 Mbps peak and 448 kbps stereo AC-3. Video sizes exclude audio and DVD muxing.",
+			fmt.Sprintf("The %s two-pass FFmpeg profile targets %d kbps video with a 9 Mbps peak and %d kbps stereo AC-3. Video sizes exclude audio and DVD muxing.", s.Profile(), s.VideoBitrate()/1000, s.AudioBitrate()/1000),
 			"Seconds includes production encoding, audio/mux, complete decode validation and checkpoint hashing; EncodingSeconds isolates both MPEG-2 passes. Reference preparation, quality measurements and authoring are outside these timings.",
 			"CPU percentages divide process CPU seconds by wall seconds and all logical CPUs. Runs are sequential.",
 			"SSIM/PSNR compare decoded output against the DVD-resolution reference. Visual assessment and physical-player compatibility still require separate review.",

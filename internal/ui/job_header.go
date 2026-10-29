@@ -51,6 +51,19 @@ func (u *window) buildJobHeader() *fyne.Container {
 			u.menuSettings(j.ID)
 		}
 	})
+	u.profileToggle = widget.NewRadioGroup([]string{model.ProfileBalanced, model.ProfileQuality}, func(value string) {
+		if u.profileSync {
+			return
+		}
+		j := u.selectedJob()
+		if j == nil || j.Locked || j.State == model.Complete || j.State == model.Running || u.snapshot.Clearing {
+			return
+		}
+		next, id := j.Settings, j.ID
+		next.EncodingProfile = value
+		u.action(func() error { return u.engine.SetSettings(id, next) })
+	})
+	u.profileToggle.Horizontal, u.profileToggle.Required = true, true
 	open := widget.NewButtonWithIcon("Open output", theme.FolderOpenIcon(), func() {
 		if j := u.selectedJob(); j != nil {
 			path := j.OutputPath
@@ -63,7 +76,7 @@ func (u *window) buildJobHeader() *fyne.Container {
 	u.headerInfo = container.NewVBox(u.source, u.meta, u.stage, container.NewHBox(rename, u.settings))
 	u.headerInfo.Hide()
 	titleRow := container.NewBorder(nil, nil, nil, container.NewHBox(u.jobState, u.jobWarning, u.headerToggle), u.title)
-	summaryRow := container.NewBorder(nil, nil, nil, container.NewHBox(u.preview, open), u.jobSummary)
+	summaryRow := container.NewBorder(nil, nil, nil, container.NewHBox(u.profileToggle, u.preview, open), u.jobSummary)
 	u.jobHeader = container.NewVBox(titleRow, summaryRow, u.activity, u.progress, u.scanProgress, u.headerInfo, widget.NewSeparator())
 	return u.jobHeader
 }
@@ -86,6 +99,7 @@ func (u *window) setHeaderExpanded(expanded bool) {
 
 func (u *window) refreshJobHeader(j *model.Job) {
 	if j == nil {
+		u.profileToggle.Disable()
 		u.headerJob = ""
 		u.setHeaderExpanded(false)
 		u.progress.Hide()
@@ -99,6 +113,10 @@ func (u *window) refreshJobHeader(j *model.Job) {
 		u.setHeaderExpanded(false)
 	}
 	u.title.SetText(j.Title)
+	u.profileSync = true
+	u.profileToggle.SetSelected(j.Settings.Profile())
+	u.profileSync = false
+	enabled(u.profileToggle, !j.Locked && j.State != model.Complete && j.State != model.Running && !u.snapshot.Clearing)
 	u.jobState.SetText(string(j.State))
 	u.source.SetText(j.Folder)
 	discs := fmt.Sprintf("~%d DVDs", j.EstimatedDiscs)

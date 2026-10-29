@@ -37,6 +37,39 @@ func TestRemovedBackendPreferencesMigrate(t *testing.T) {
 	}
 }
 
+func TestProfilesPersistAndRetainLegacyQuality(t *testing.T) {
+	s := DefaultSettings(t.TempDir())
+	if s.Profile() != ProfileBalanced {
+		t.Fatal("new jobs must default to Balanced")
+	}
+	balancedKey := s.EncodingKey()
+	balancedEstimate := (Video{Duration: 3600}).EstimatedBytes(s)
+	s.EncodingProfile = ProfileQuality
+	qualityKey := s.EncodingKey()
+	if qualityKey == balancedKey || qualityKey != Hash("mpeg2-v5-quality-ceiling-ac3-448-2pass-PAL") {
+		t.Fatal("quality checkpoint identity changed", qualityKey)
+	}
+	if (Video{Duration: 3600}).EstimatedBytes(s) <= balancedEstimate {
+		t.Fatal("profile ignored in space estimate")
+	}
+	data, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var saved Settings
+	if err = json.Unmarshal(data, &saved); err != nil || saved.Profile() != ProfileQuality || saved.EncodingKey() != qualityKey {
+		t.Fatal(saved, err)
+	}
+	var legacy Settings
+	if err = json.Unmarshal([]byte(`{"standard":"PAL"}`), &legacy); err != nil || legacy.Profile() != ProfileQuality || legacy.EncodingKey() != qualityKey {
+		t.Fatal("legacy job profile changed", legacy, err)
+	}
+	defaults := DefaultSettings(t.TempDir())
+	if err = json.Unmarshal([]byte(`{"standard":"NTSC"}`), &defaults); err != nil || defaults.Profile() != ProfileBalanced {
+		t.Fatal("old preferences overrode new default", defaults, err)
+	}
+}
+
 func TestOriginalVideoLabel(t *testing.T) {
 	v := Video{Path: filepath.Join("clips", "Family.trip.1999.mp4"), Label: "Renamed title"}
 	if v.OriginalLabel() != "Family.trip.1999" {

@@ -90,12 +90,17 @@ func TestPipeline(t *testing.T) {
 		}
 		original[f.name] = h
 	}
-	for _, standard := range []string{"PAL", "NTSC"} {
-		t.Run(standard, func(t *testing.T) {
+	for _, tc := range []struct{ profile, standard string }{
+		{model.ProfileBalanced, "PAL"}, {model.ProfileBalanced, "NTSC"},
+		{model.ProfileQuality, "PAL"}, {model.ProfileQuality, "NTSC"},
+	} {
+		profile, standard := tc.profile, tc.standard
+		t.Run(profile+"/"+standard, func(t *testing.T) {
 			s := model.DefaultSettings(dir)
 			s.Standard = standard
-			s.OutputDir = filepath.Join(dir, "output-"+standard)
-			s.WorkDir = filepath.Join(dir, "work-"+standard)
+			s.EncodingProfile = profile
+			s.OutputDir = filepath.Join(dir, "output-"+profile+"-"+standard)
+			s.WorkDir = filepath.Join(dir, "work-"+profile+"-"+standard)
 			s.TitlesPerPage = 2
 			s.KeepWork = true
 			s.Encoders = 1
@@ -106,7 +111,7 @@ func TestPipeline(t *testing.T) {
 				s.Media = "DVD-9"
 				s.Packing = "Space efficiency"
 			}
-			st, err := store.Open(filepath.Join(dir, standard+".db"))
+			st, err := store.Open(filepath.Join(dir, profile+"-"+standard+".db"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -249,7 +254,7 @@ func TestPipeline(t *testing.T) {
 				if len(p.Streams) < 2 || p.Streams[0].Codec != "mpeg2video" || p.Streams[0].Height != s.Height() || p.Streams[1].Codec != "ac3" || p.Streams[1].Channels != 2 {
 					t.Fatal(b.String())
 				}
-				if p.Streams[0].Pixel != "yuv420p" || media.Ratio(p.Streams[0].Rate) != media.Ratio(s.FPS()) || p.Streams[1].BitRate != "448000" || p.Streams[1].SampleRate != "48000" {
+				if p.Streams[0].Pixel != "yuv420p" || media.Ratio(p.Streams[0].Rate) != media.Ratio(s.FPS()) || p.Streams[1].BitRate != fmt.Sprint(s.AudioBitrate()) || p.Streams[1].SampleRate != "48000" {
 					t.Fatal("DVD profile, frame rate or audio constraints violated", b.String())
 				}
 				// dvdvideo exposes IFO properties but does not report the MPEG-2

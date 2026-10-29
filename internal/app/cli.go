@@ -74,6 +74,7 @@ func CLI(args []string) error {
 	downloadFFmpeg := fs.Bool("download-ffmpeg", false, "Download and remember the recommended private FFmpeg installation")
 	resume := fs.Bool("resume", false, "Resume saved queue")
 	workers := fs.Int("encoders", 2, "Parallel encoders (1–2)")
+	profile := fs.String("profile", model.ProfileBalanced, "Encoding profile: Balanced or Quality")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -149,6 +150,7 @@ func CLI(args []string) error {
 	defaults.KeepWork = *keep
 	defaults.NoMenu = *noMenu
 	defaults.Encoders = *workers
+	defaults.EncodingProfile = *profile
 	defaults.TitlesPerPage = *perPage
 	if *efficient {
 		defaults.Packing = "Space efficiency"

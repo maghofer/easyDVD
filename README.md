@@ -52,8 +52,10 @@ using easyDVD.
 3. Choose your TV standard, disc capacity and menu style, then select
    **Start / resume**. Finished ISO files appear in your output folder.
 
-FFmpeg performs high-quality two-pass MPEG-2 encoding, targeting 9 Mbps video
-with 448 kbps AC-3 audio. easyDVD adds discs instead of reducing the bitrate to
+FFmpeg performs two-pass MPEG-2 encoding. **Balanced** is the default, targeting
+7.5 Mbps video with 256 kbps AC-3 audio for speed and smaller files. Choose
+**Quality** in the job header for 9 Mbps video, 448 kbps audio and more detailed
+analysis. easyDVD adds discs instead of reducing the chosen profile's bitrate to
 squeeze more footage onto one disc. FFmpeg remains an external dependency;
 first run can locate it or download a private copy. See [Encoding quality](docs/ENCODERS.md).
 For a single included video, **Job settings → Playback → No menu** creates a
