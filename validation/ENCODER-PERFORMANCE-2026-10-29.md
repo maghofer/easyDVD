@@ -23,6 +23,8 @@ passes, HCenc's lossless FFV1 preparation, audio/mux, full decode validation and
 checkpoint hashing. Shared source analysis/reference creation, network staging,
 quality metrics and DVD/ISO authoring are outside this timing. The prepared test
 uses a scene beginning at 60 seconds; the source-path test uses the first minute.
+CPU percentages sum the child tools' CPU time; Go's checkpoint hashing is
+included in elapsed time but not in that CPU-time sum.
 
 HCenc took **8.8×** as long in the source-path test. Its MPEG-2 phase averaged
 19.5% CPU, equivalent to about 3.1 fully occupied logical processors. FFmpeg's
@@ -78,6 +80,9 @@ DVD-demuxed title report **4:3**. Full DVD-title decoding passed; output duratio
 is 795.120 seconds (difference 0.008889 seconds), and the ISO hash matches the
 manifest. The decoded frame was visually checked: the large baked-in side bars
 are gone. The HCenc benchmark outputs also report 4:3 and author successfully.
+The second full-length source from the same user test (793.888889 seconds) was
+also regenerated with 158 pixels removed per side. Its MPG reports 4:3; full DVD
+decoding and ISO hash verification passed as well.
 
 ## Regression checks
 

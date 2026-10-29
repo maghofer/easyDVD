@@ -11,9 +11,7 @@ import (
 	"strings"
 )
 
-// LegacyWorkingDir gives ANSI-based helpers an existing short path when one
-// is available. Relative media names remain valid while Windows' ANSI directory
-// enumeration avoids lossy conversion of a Unicode parent directory.
+// shortPath returns an existing Windows short name when the volume provides one.
 func shortPath(path string) string {
 	if path == "" {
 		return path
@@ -49,7 +47,9 @@ func asciiPath(path string) bool {
 // relative references such as ../../assets remain inside the same tree.
 func LegacyWorkingDir(dir string, related ...string) (string, func(), error) {
 	noop := func() {}
-	if windows.GetACP() == 65001 || asciiPath(dir) {
+	// A UTF-8 manifest on the Go executable does not change a child helper's
+	// ANSI code page. Protect non-ASCII paths independently of our own GetACP.
+	if asciiPath(dir) {
 		return dir, noop, nil
 	}
 	if short := shortPath(dir); asciiPath(short) {
