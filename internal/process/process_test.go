@@ -53,6 +53,12 @@ func TestCancelProcessTree(t *testing.T) {
 	if pid == 0 {
 		t.Fatal("helper did not start")
 	}
+	// Group/job termination is asynchronous: the parent can be reaped before
+	// the kernel schedules a killed grandchild. Keep the same four-second
+	// cancellation budget rather than asserting on that intermediate state.
+	for processAlive(pid) && time.Since(start) < 4*time.Second {
+		time.Sleep(10 * time.Millisecond)
+	}
 	if processAlive(pid) {
 		t.Fatalf("grandchild %d survived cancellation", pid)
 	}
