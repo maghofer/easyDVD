@@ -88,6 +88,11 @@ a compatible external installation or offers an explicit private download.
 No system-wide installation or PATH change is required. Packaging refuses to
 overwrite existing output directories. Close the app before rebuilding its exe.
 
+HCenc is the default encoder for new jobs. Its HCenc/AviSynth/FFMS2 binaries
+remain separate from the runtime ZIP; the included `scripts/prepare-hcenc.ps1`
+downloads the pinned private x86 runtime into `tools/hcenc`. It requires 7-Zip.
+See [encoder setup](ENCODERS.md) for manual location and the FFmpeg alternative.
+
 The authoring toolchain is built once into a reusable local/CI cache. A valid
 cache is verified and reused on subsequent app builds and pushes. To rebuild the
 helpers explicitly, run `scripts/build-authoring.ps1` with an isolated scratch

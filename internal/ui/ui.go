@@ -61,6 +61,7 @@ type window struct {
 	snapshot                                                         engine.Snapshot
 	selected                                                         string
 	selectionJob                                                     string
+	selectionAnchor                                                  string
 	selectedFiles                                                    map[string]bool
 	fileHints                                                        *fyne.Container
 	selectAll                                                        *widget.Check
@@ -121,6 +122,7 @@ func Run() error {
 		if !u.ensureMedia() {
 			return
 		}
+		var paths []string
 		for _, uri := range uris {
 			if uri.Scheme() != "file" {
 				continue
@@ -130,8 +132,9 @@ func Run() error {
 				p = p[1:]
 			}
 			p = filepath.FromSlash(p)
-			u.action(func() error { return e.Add(p) })
+			paths = append(paths, p)
 		}
+		u.addDroppedPaths(paths)
 	})
 	w.SetCloseIntercept(func() {
 		s := u.snapshot
@@ -253,8 +256,8 @@ func (u *window) build() fyne.CanvasObject {
 	u.clear = widget.NewButtonWithIcon("Clear queue", theme.DeleteIcon(), u.clearQueue)
 	queueHeading := container.NewBorder(nil, nil, nil, u.clear, widget.NewLabelWithStyle("Queue", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 	queue := container.NewBorder(container.NewVBox(queueHeading, widget.NewSeparator()), container.NewHBox(u.up, u.down, layout.NewSpacer(), u.remove), nil, nil, u.queue)
-	dropLabel := widget.NewLabelWithStyle("Drop folders here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	sub := widget.NewLabelWithStyle("One folder → one DVD set  ·  Subfolders included", fyne.TextAlignCenter, fyne.TextStyle{})
+	dropLabel := widget.NewLabelWithStyle("Drop folders or video files here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	sub := widget.NewLabelWithStyle("Folders include subfolders · Group files into DVD sets", fyne.TextAlignCenter, fyne.TextStyle{})
 	border := canvas.NewRectangle(color.Transparent)
 	border.StrokeColor = theme.DisabledColor()
 	border.StrokeWidth = 1
@@ -271,7 +274,7 @@ func (u *window) build() fyne.CanvasObject {
 	largeBorder.StrokeColor = theme.DisabledColor()
 	largeBorder.StrokeWidth = 1
 	largeBorder.CornerRadius = 5
-	largeDrop := container.NewStack(largeBorder, container.NewPadded(container.NewVBox(layout.NewSpacer(), widget.NewLabelWithStyle("Drop folders here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), widget.NewLabelWithStyle("One folder → one DVD set · Subfolders included", fyne.TextAlignCenter, fyne.TextStyle{}), container.NewCenter(widget.NewButtonWithIcon("Add folders", theme.FolderOpenIcon(), u.addFolders)), layout.NewSpacer())))
+	largeDrop := container.NewStack(largeBorder, container.NewPadded(container.NewVBox(layout.NewSpacer(), widget.NewLabelWithStyle("Drop folders or video files here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), widget.NewLabelWithStyle("Folders include subfolders · Group files into DVD sets", fyne.TextAlignCenter, fyne.TextStyle{}), container.NewCenter(widget.NewButtonWithIcon("Add folders", theme.FolderOpenIcon(), u.addFolders)), layout.NewSpacer())))
 	u.empty = container.NewCenter(container.NewGridWrap(fyne.NewSize(510, 230), largeDrop))
 	u.dropBar = container.NewVBox(drop, widget.NewSeparator())
 	right := container.NewBorder(u.dropBar, nil, nil, nil, container.NewStack(u.empty, u.details))
@@ -351,7 +354,7 @@ func (u *window) refresh() {
 		u.details.Show()
 		u.dropBar.Show()
 		enabled(u.settings, !j.Locked && !u.snapshot.Clearing)
-		enabled(u.preview, len(j.ActiveVideos()) > 0 && j.ScanComplete)
+		enabled(u.preview, len(j.ActiveVideos()) > 0 && j.ScanComplete && !j.Settings.NoMenu)
 		enabled(u.cancel, j.State != model.Complete && j.State != model.Canceled)
 		enabled(u.retry, u.mediaReady && !u.snapshot.Clearing && !u.snapshot.Busy[j.ID] && (j.State == model.Blocked || j.State == model.Paused || j.State == model.Canceled))
 	}
@@ -416,8 +419,18 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 	stage.SetChecked(s.StageLocally)
 	keep := widget.NewCheck("Keep intermediate media after success", nil)
 	keep.SetChecked(s.KeepWork)
+	noMenu := widget.NewCheck("No menu — start playback automatically (one included video)", nil)
+	noMenu.SetChecked(s.NoMenu)
+	if !s.NoMenu && (id == "" || u.selectedJob() == nil || len(u.selectedJob().ActiveVideos()) != 1) {
+		noMenu.Disable()
+	}
 	workers := widget.NewSelect([]string{"1", "2"}, nil)
 	workers.SetSelected(strconv.Itoa(s.Encoders))
+	encoder := widget.NewSelect([]string{"HCenc", "FFmpeg"}, nil)
+	encoder.SetSelected(s.Encoder())
+	hcencFolder := widget.NewEntry()
+	hcencFolder.SetText(s.HCencDir)
+	hcencFolder.SetPlaceHolder("Choose the HCenc installation folder, or leave blank for automatic detection")
 	output := widget.NewEntry()
 	output.SetText(s.OutputDir)
 	work := widget.NewEntry()
@@ -437,6 +450,9 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 	appearance := widget.NewSelect([]string{"System", "Light", "Dark"}, nil)
 	appearance.SetSelected(s.Theme)
 	form := widget.NewForm(widget.NewFormItem("TV standard", standard), widget.NewFormItem("Disc capacity", medium), widget.NewFormItem("File allocation", packingMode), widget.NewFormItem("Menu layout", menuLayout), widget.NewFormItem("Titles per page", perPage), widget.NewFormItem("Encoding workers", workers), widget.NewFormItem("Output folder", folder(output)), widget.NewFormItem("Local work folder", folder(work)), widget.NewFormItem("Appearance", appearance))
+	form.Append("Playback", noMenu)
+	form.Append("Video encoder", encoder)
+	form.Append("HCenc folder", folder(hcencFolder))
 	note := "Applies to new and pending jobs. Started jobs retain their settings."
 	if id != "" {
 		note = "Settings for this folder. Locked when processing starts."
@@ -457,8 +473,11 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 		next.Layout = menuLayout.Selected
 		next.TitlesPerPage = n
 		next.Encoders, _ = strconv.Atoi(workers.Selected)
+		next.VideoEncoder = encoder.Selected
+		next.HCencDir = strings.TrimSpace(hcencFolder.Text)
 		next.StageLocally = stage.Checked
 		next.KeepWork = keep.Checked
+		next.NoMenu = noMenu.Checked
 		next.OutputDir = strings.TrimSpace(output.Text)
 		next.WorkDir = strings.TrimSpace(work.Text)
 		next.Theme = appearance.Selected
@@ -512,7 +531,9 @@ func (u *window) diagnostics() {
 	u.action(func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		statuses := u.engine.Tools().Check(ctx)
+		tools := u.engine.Tools()
+		statuses := tools.Check(ctx)
+		statuses = append(statuses, tools.EncoderStatus(u.engine.Snapshot().Settings))
 		var text strings.Builder
 		for _, s := range statuses {
 			fmt.Fprintf(&text, "%s\n%s\n%s\n", s.Name, s.Path, s.Version)

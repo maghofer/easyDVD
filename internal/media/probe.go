@@ -23,7 +23,10 @@ func init() {
 		extensions[s] = true
 	}
 }
-func IsVideo(path string) bool { return extensions[strings.ToLower(filepath.Ext(path))] }
+func IsVideo(path string) bool {
+	// macOS AppleDouble files carry resource metadata, never video data.
+	return !strings.HasPrefix(filepath.Base(path), "._") && extensions[strings.ToLower(filepath.Ext(path))]
+}
 
 type stream struct {
 	Index       int    `json:"index"`

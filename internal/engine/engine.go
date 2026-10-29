@@ -76,6 +76,10 @@ func New(st *store.Store, defaults model.Settings, t media.Tools, options ...Opt
 	}
 	for i := range e.jobs {
 		j := &e.jobs[i]
+		if !j.Locked && j.Settings.VideoEncoder == "" {
+			j.Settings.VideoEncoder = settings.VideoEncoder
+			j.Settings.HCencDir = settings.HCencDir
+		}
 		if len(j.ID) != 24 || strings.Trim(j.ID, "0123456789abcdef") != "" {
 			cancel()
 			return nil, fmt.Errorf("invalid saved job identifier")
@@ -152,10 +156,17 @@ func (e *Engine) Add(folder string) error {
 		return err
 	}
 	absolute = filepath.Clean(absolute)
+	info, err := fsops.Stat(e.ctx, absolute)
+	if err != nil {
+		return err
+	}
+	if info.Exists && !info.Directory {
+		return e.AddFiles([]string{absolute})
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for _, j := range e.jobs {
-		if strings.EqualFold(j.Folder, absolute) && j.State != model.Complete && j.State != model.Canceled {
+		if len(j.Sources) == 0 && strings.EqualFold(j.Folder, absolute) && j.State != model.Complete && j.State != model.Canceled {
 			return fmt.Errorf("folder is already in the queue")
 		}
 	}
@@ -166,10 +177,64 @@ func (e *Engine) Add(folder string) error {
 	return nil
 }
 
+// AddFiles records an explicit selection so rescans never pick up sibling files.
+func (e *Engine) AddFiles(paths []string) error {
+	if len(paths) == 0 {
+		return fmt.Errorf("select at least one video file")
+	}
+	var sources []string
+	seen := map[string]bool{}
+	for _, path := range paths {
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+		absolute = filepath.Clean(absolute)
+		if !media.IsVideo(absolute) {
+			return fmt.Errorf("unsupported video file: %s", path)
+		}
+		key := strings.ToLower(absolute)
+		if !seen[key] {
+			sources = append(sources, absolute)
+			seen[key] = true
+		}
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, j := range e.jobs {
+		if j.State == model.Complete || j.State == model.Canceled {
+			continue
+		}
+		for _, path := range j.Sources {
+			if seen[strings.ToLower(path)] {
+				return fmt.Errorf("file is already in the queue: %s", path)
+			}
+		}
+	}
+	title := strings.TrimSuffix(filepath.Base(sources[0]), filepath.Ext(sources[0]))
+	if len(sources) > 1 {
+		title = filepath.Base(filepath.Dir(sources[0]))
+	}
+	j := model.Job{ID: model.ID(), Folder: filepath.Dir(sources[0]), Sources: sources, Title: title, State: model.Scanning, Stage: "Inspecting selected videos", Settings: e.settings, Created: time.Now()}
+	e.jobs = append(e.jobs, j)
+	e.persistLocked()
+	e.scanLocked(j.ID)
+	return nil
+}
+
 func (e *Engine) scanLocked(id string) {
 	if _, ok := e.scans[id]; ok {
 		return
 	}
+	// Publish the pending scan before waking the queue loop. Otherwise a
+	// resumed scan can look idle and cause Start to disable processing.
+	i := e.index(id)
+	if i < 0 {
+		return
+	}
+	e.jobs[i].State = model.Scanning
+	e.jobs[i].ScanComplete = false
+	e.jobs[i].Stage = "Discovering videos"
 	ctx, cancel := context.WithCancel(e.ctx)
 	e.scans[id] = cancel
 	e.wg.Add(1)
@@ -212,7 +277,11 @@ func (e *Engine) scanLocked(id string) {
 					case <-ctx.Done():
 						return
 					}
-					v, err := e.tools.Probe(ctx, filepath.Join(job.Folder, relative), relative)
+					path := relative
+					if !filepath.IsAbs(path) {
+						path = filepath.Join(job.Folder, relative)
+					}
+					v, err := e.tools.Probe(ctx, path, relative)
 					<-e.probeSlots
 					if ctx.Err() != nil {
 						return
@@ -224,6 +293,7 @@ func (e *Engine) scanLocked(id string) {
 						v.Label = previous.Label
 						v.Excluded = previous.Excluded
 						if previous.Fingerprint() == v.Fingerprint() {
+							v.CropLeft, v.CropRight, v.CropChecked = previous.CropLeft, previous.CropRight, previous.CropChecked
 							v.Encoded = previous.Encoded
 							v.EncodedSize = previous.EncodedSize
 							v.EncodedHash = previous.EncodedHash
@@ -247,7 +317,7 @@ func (e *Engine) scanLocked(id string) {
 				}
 			}()
 		}
-		err := media.Discover(ctx, job.Folder, []string{job.Settings.WorkDir, job.Settings.OutputDir}, func(path string) {
+		found := func(path string) {
 			e.mu.Lock()
 			if i := e.index(id); i >= 0 {
 				e.jobs[i].Discovered++
@@ -258,7 +328,19 @@ func (e *Engine) scanLocked(id string) {
 			case paths <- path:
 			case <-ctx.Done():
 			}
-		})
+		}
+		var err error
+		if len(job.Sources) > 0 {
+			for _, path := range job.Sources {
+				relative, relErr := filepath.Rel(job.Folder, path)
+				if relErr != nil {
+					relative = path
+				}
+				found(relative)
+			}
+		} else {
+			err = media.Discover(ctx, job.Folder, []string{job.Settings.WorkDir, job.Settings.OutputDir}, found)
+		}
 		close(paths)
 		workers.Wait()
 		e.mu.Lock()
@@ -525,6 +607,9 @@ func (e *Engine) Edit(id, title, videoID, label string, excluded *bool) error {
 			}
 		}
 	}
+	if excluded != nil {
+		e.refreshReadinessLocked(j)
+	}
 	e.estimateLocked(j)
 	e.persistLocked()
 	return nil
@@ -563,9 +648,32 @@ func (e *Engine) SetExcluded(id string, videoIDs []string, excluded bool) error 
 			j.Videos[k].Excluded = excluded
 		}
 	}
+	e.refreshReadinessLocked(j)
 	e.estimateLocked(j)
 	e.persistLocked()
 	return nil
+}
+
+func (e *Engine) refreshReadinessLocked(j *model.Job) {
+	if !j.ScanComplete || (j.State != model.Ready && j.State != model.Blocked) {
+		return
+	}
+	active := j.ActiveVideos()
+	if len(active) == 0 {
+		j.State, j.Error = model.Blocked, "No included video files"
+		return
+	}
+	for _, v := range active {
+		if v.Error != "" {
+			j.State, j.Error = model.Blocked, "One or more videos need attention; retry or exclude them"
+			return
+		}
+	}
+	if j.Settings.NoMenu && len(active) != 1 {
+		j.State, j.Error = model.Blocked, "No menu requires exactly one included video; enable menus or exclude the other files"
+		return
+	}
+	j.State, j.Stage, j.Error = model.Ready, "Ready", ""
 }
 
 func (e *Engine) SetSettings(id string, s model.Settings) error {
@@ -582,6 +690,7 @@ func (e *Engine) SetSettings(id string, s model.Settings) error {
 		for i := range e.jobs {
 			if !e.jobs[i].Locked && e.jobs[i].State != model.Complete {
 				e.jobs[i].Settings = s
+				e.refreshReadinessLocked(&e.jobs[i])
 				e.estimateLocked(&e.jobs[i])
 			}
 		}
@@ -594,6 +703,7 @@ func (e *Engine) SetSettings(id string, s model.Settings) error {
 			return fmt.Errorf("settings were locked when this job started; add the folder again for different encoding settings")
 		}
 		e.jobs[i].Settings = s
+		e.refreshReadinessLocked(&e.jobs[i])
 		e.estimateLocked(&e.jobs[i])
 	}
 	e.persistLocked()
@@ -663,6 +773,13 @@ func (e *Engine) loop() {
 				break
 			}
 			j := e.jobs[i]
+			if j.Settings.NoMenu && len(j.ActiveVideos()) != 1 {
+				e.jobs[i].State = model.Blocked
+				e.jobs[i].Error = "No menu requires exactly one included video; enable menus or exclude the other files"
+				e.persistLocked()
+				e.mu.Unlock()
+				continue
+			}
 			ctx, cancel := context.WithCancel(e.ctx)
 			e.cancels[j.ID] = cancel
 			delete(e.pauses, j.ID)
@@ -782,6 +899,17 @@ func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) err
 	if s.StageLocally {
 		needWork += stage * int64(s.Encoders+1)
 	}
+	if s.Encoder() == "HCenc" {
+		// Bound concurrent lossless intermediates by raw 4:2:0 frame size,
+		// with headroom for the container/codec. FFV1 normally needs less.
+		var largest float64
+		for _, v := range videos {
+			if v.Encoded == "" && v.Duration > largest {
+				largest = v.Duration
+			}
+		}
+		needWork += int64(largest * media.Ratio(s.FPS()) * 720 * float64(s.Height()) * 1.5 * 1.1 * float64(s.Encoders))
+	}
 	output := remaining
 	for _, v := range videos {
 		output += v.EncodedSize
@@ -814,12 +942,18 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 	if err := j.Settings.Validate(); err != nil {
 		return err
 	}
+	if err := e.tools.RequireEncoder(j.Settings); err != nil {
+		return err
+	}
 	if err := fsops.RequireLocal(ctx, j.Settings.WorkDir); err != nil {
 		return err
 	}
 	videos := j.ActiveVideos()
 	if len(videos) == 0 {
 		return fmt.Errorf("no included videos")
+	}
+	if j.Settings.NoMenu && len(videos) != 1 {
+		return fmt.Errorf("no menu requires exactly one included video; enable menus or exclude the other files")
 	}
 	for _, v := range videos {
 		if v.Error != "" && v.Duration <= 0 {
@@ -1059,6 +1193,16 @@ func (e *Engine) encode(ctx context.Context, j model.Job, videos []model.Video, 
 					fail(v, err)
 					release()
 					continue
+				}
+				if v.Encoded == "" && !v.CropChecked {
+					e.update(j.ID, false, func(job *model.Job) { job.Stage = "Checking black borders · " + v.Label })
+					var err error
+					v, err = e.tools.DetectPillarbox(ctx, v, task.input, log)
+					if err != nil {
+						fail(v, err)
+						release()
+						continue
+					}
 				}
 				v.Thumbnail = filepath.Join(dir, "thumbnail.jpg")
 				if _, err := os.Stat(v.Thumbnail); err != nil {

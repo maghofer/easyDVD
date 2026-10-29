@@ -52,6 +52,17 @@ func wait(t *testing.T, e *engine.Engine, predicate func(engine.Snapshot) bool) 
 	}
 }
 func TestPipeline(t *testing.T) {
+	testPipeline(t, "FFmpeg")
+}
+
+func TestHCencPipeline(t *testing.T) {
+	if os.Getenv("EASYDVD_INTEGRATION") != "1" || media.FindTools().HCencFolder(model.DefaultSettings(t.TempDir())) == "" {
+		t.Skip("HCenc runtime unavailable")
+	}
+	testPipeline(t, "HCenc")
+}
+
+func testPipeline(t *testing.T, encoder string) {
 	if os.Getenv("EASYDVD_INTEGRATION") != "1" {
 		t.Skip("set EASYDVD_INTEGRATION=1 to run real encoders and DVD authoring")
 	}
@@ -93,6 +104,7 @@ func TestPipeline(t *testing.T) {
 	for _, standard := range []string{"PAL", "NTSC"} {
 		t.Run(standard, func(t *testing.T) {
 			s := model.DefaultSettings(dir)
+			s.VideoEncoder = encoder
 			s.Standard = standard
 			s.OutputDir = filepath.Join(dir, "output-"+standard)
 			s.WorkDir = filepath.Join(dir, "work-"+standard)

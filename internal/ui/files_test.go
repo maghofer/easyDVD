@@ -171,6 +171,33 @@ func TestFileSelectionBulkAndPerRowActions(t *testing.T) {
 	}
 }
 
+func TestShiftSelectionUsesInclusiveAnchorAcrossRecycledRows(t *testing.T) {
+	u := fileListFixture(t)
+	u.selectFileRange("4", true, false)
+	u.selectFileRange("16", true, true)
+	if len(u.selectedFiles) != 13 {
+		t.Fatal(u.selectedFiles)
+	}
+	u.selectFileRange("1", true, true)
+	if len(u.selectedFiles) != 16 || u.selectionAnchor != "4" {
+		t.Fatal("reverse range moved the anchor", u.selectedFiles)
+	}
+	u.selectFileRange("10", false, false)
+	if u.selectedFiles["10"] || u.selectionAnchor != "10" {
+		t.Fatal("plain click did not reset anchor")
+	}
+	u.selectFileRange("12", false, true)
+	if !u.selectedFiles["10"] || !u.selectedFiles["11"] || !u.selectedFiles["12"] {
+		t.Fatal("selected endpoint toggled range off")
+	}
+	u.snapshot.Jobs = append(u.snapshot.Jobs, model.Job{ID: "another", State: model.Ready})
+	u.selected = "another"
+	u.refreshFileSelection()
+	if u.selectionAnchor != "" || len(u.selectedFiles) != 0 {
+		t.Fatal("anchor leaked to another job")
+	}
+}
+
 func TestFileTitleDialogAndReadOnlyStates(t *testing.T) {
 	u := fileListFixture(t)
 	r := newFileRow(u)

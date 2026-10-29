@@ -65,6 +65,8 @@ func CLI(args []string) error {
 	direct := fs.Bool("direct", false, "Read original sources directly")
 	keep := fs.Bool("keep-work", false, "Retain intermediate media")
 	thumbs := fs.Bool("thumbnails", false, "Thumbnail menus")
+	noMenu := fs.Bool("no-menu", false, "Start playback automatically; requires one included video per job")
+	combine := fs.Bool("combine-files", false, "Combine explicit video files into one DVD set")
 	perPage := fs.Int("titles", 10, "Titles per page (1–12 text, 1–6 thumbnails)")
 	tools := fs.Bool("check-tools", false, "Print tool diagnostics and exit")
 	authoringOnly := fs.Bool("check-authoring-tools", false, "Check bundled authoring tools without requiring FFmpeg")
@@ -72,6 +74,8 @@ func CLI(args []string) error {
 	downloadFFmpeg := fs.Bool("download-ffmpeg", false, "Download and remember the recommended private FFmpeg installation")
 	resume := fs.Bool("resume", false, "Resume saved queue")
 	workers := fs.Int("encoders", 2, "Parallel encoders (1–2)")
+	encoder := fs.String("video-encoder", defaults.Encoder(), "Video encoder: HCenc or FFmpeg")
+	hcencDir := fs.String("hcenc-dir", "", "HCenc folder with 32-bit AviSynth.dll and ffms2.dll")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -121,9 +125,15 @@ func CLI(args []string) error {
 	if *tools {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		b, _ := json.MarshalIndent(t.Check(ctx), "", "  ")
+		selected := defaults
+		selected.VideoEncoder, selected.HCencDir = *encoder, strings.TrimSpace(*hcencDir)
+		statuses := append(t.Check(ctx), t.EncoderStatus(selected))
+		b, _ := json.MarshalIndent(statuses, "", "  ")
 		fmt.Println(string(b))
-		return t.Require()
+		if err := t.Require(); err != nil {
+			return err
+		}
+		return t.RequireEncoder(selected)
 	}
 	if *downloadFFmpeg && fs.NArg() == 0 && !*resume {
 		return t.Require()
@@ -142,7 +152,10 @@ func CLI(args []string) error {
 	defaults.Media = *medium
 	defaults.StageLocally = !*direct
 	defaults.KeepWork = *keep
+	defaults.NoMenu = *noMenu
 	defaults.Encoders = *workers
+	defaults.VideoEncoder = *encoder
+	defaults.HCencDir = strings.TrimSpace(*hcencDir)
 	defaults.TitlesPerPage = *perPage
 	if *efficient {
 		defaults.Packing = "Space efficiency"
@@ -185,9 +198,16 @@ func CLI(args []string) error {
 			}
 		}
 	}
-	for _, folder := range fs.Args() {
-		if err = e.Add(folder); err != nil {
+	if *combine {
+		err = e.AddFiles(fs.Args())
+		if err != nil {
 			return err
+		}
+	} else {
+		for _, folder := range fs.Args() {
+			if err = e.Add(folder); err != nil {
+				return err
+			}
 		}
 	}
 	e.Start()

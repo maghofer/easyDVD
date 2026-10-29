@@ -30,18 +30,27 @@ type Settings struct {
 	TitlesPerPage int       `json:"titles_per_page"`
 	StageLocally  bool      `json:"stage_locally"`
 	Encoders      int       `json:"encoders"`
+	VideoEncoder  string    `json:"video_encoder,omitempty"`
+	HCencDir      string    `json:"hcenc_dir,omitempty"`
 	OutputDir     string    `json:"output_dir"`
 	WorkDir       string    `json:"work_dir"`
 	Theme         string    `json:"theme"`
 	KeepWork      bool      `json:"keep_work"`
+	NoMenu        bool      `json:"no_menu,omitempty"`
 	Menu          MenuStyle `json:"menu"`
 }
 
 func DefaultSettings(base string) Settings {
-	return Settings{Standard: "PAL", Media: "DVD-5", Packing: "Strict order", Layout: "Text", TitlesPerPage: 10, StageLocally: true, Encoders: 2, OutputDir: filepath.Join(base, "easyDVD Output"), WorkDir: filepath.Join(base, "easyDVD Work"), Theme: "System", Menu: DefaultMenuStyle()}
+	return Settings{Standard: "PAL", Media: "DVD-5", Packing: "Strict order", Layout: "Text", TitlesPerPage: 10, StageLocally: true, Encoders: 2, VideoEncoder: "HCenc", OutputDir: filepath.Join(base, "easyDVD Output"), WorkDir: filepath.Join(base, "easyDVD Work"), Theme: "System", Menu: DefaultMenuStyle()}
 }
 
 func (s Settings) Validate() error {
+	if s.Encoder() != "HCenc" && s.Encoder() != "FFmpeg" {
+		return fmt.Errorf("choose HCenc or FFmpeg as video encoder")
+	}
+	if s.HCencDir != "" && !filepath.IsAbs(s.HCencDir) {
+		return fmt.Errorf("HCenc folder must be an absolute path")
+	}
 	if s.Standard != "PAL" && s.Standard != "NTSC" {
 		return fmt.Errorf("choose PAL or NTSC")
 	}
@@ -101,7 +110,26 @@ func (s Settings) GOP() string {
 
 // Only settings affecting an encoded title belong here. Menu edits and packing do not re-encode.
 func (s Settings) EncodingKey() string {
-	return Hash("mpeg2-v2-8000-9000-ac3-256-2pass-" + s.Standard)
+	if s.VideoEncoder == "" {
+		return Hash("mpeg2-v2-8000-9000-ac3-256-2pass-" + s.Standard)
+	}
+	return Hash("mpeg2-v3-pillarbox-8000-9000-ac3-256-2pass-" + s.Encoder() + "-" + s.Standard)
+}
+
+// Empty identifies queues saved before encoder selection existed.
+func (s Settings) Encoder() string {
+	if s.VideoEncoder == "" {
+		return "FFmpeg"
+	}
+	return s.VideoEncoder
+}
+
+func (v Video) ArtifactKey(s Settings) string {
+	key := s.EncodingKey() + v.Fingerprint()
+	if v.CropLeft+v.CropRight > 0 {
+		key += fmt.Sprintf(":crop:%d:%d", v.CropLeft, v.CropRight)
+	}
+	return key
 }
 
 type Video struct {
@@ -115,6 +143,9 @@ type Video struct {
 	Width       int     `json:"width"`
 	Height      int     `json:"height"`
 	DAR         float64 `json:"dar"`
+	CropLeft    int     `json:"crop_left,omitempty"`
+	CropRight   int     `json:"crop_right,omitempty"`
+	CropChecked bool    `json:"crop_checked,omitempty"`
 	FPS         float64 `json:"fps"`
 	FieldOrder  string  `json:"field_order"`
 	VideoStream int     `json:"video_stream"`
@@ -144,10 +175,17 @@ func (v Video) OriginalLabel() string {
 func (v Video) Fingerprint() string   { return Hash(fmt.Sprintf("%s:%d:%d", v.Path, v.Size, v.ModTime)) }
 func (v Video) EstimatedBytes() int64 { return int64(v.Duration * 8256000 / 8 * 1.035) }
 func (v Video) Aspect() string {
-	if v.DAR >= 1.55 {
+	if v.ContentDAR() >= 1.55 {
 		return "16:9"
 	}
 	return "4:3"
+}
+
+func (v Video) ContentDAR() float64 {
+	if v.Width > 0 && v.CropLeft >= 0 && v.CropRight >= 0 && v.CropLeft+v.CropRight < v.Width {
+		return v.DAR * float64(v.Width-v.CropLeft-v.CropRight) / float64(v.Width)
+	}
+	return v.DAR
 }
 
 type Disc struct {
@@ -162,6 +200,7 @@ type Disc struct {
 type Job struct {
 	ID             string     `json:"id"`
 	Folder         string     `json:"folder"`
+	Sources        []string   `json:"sources,omitempty"`
 	Title          string     `json:"title"`
 	State          State      `json:"state"`
 	Stage          string     `json:"stage"`
@@ -201,6 +240,7 @@ func (j Job) Duration() float64 {
 }
 func (j Job) Clone() Job {
 	c := j
+	c.Sources = append([]string(nil), j.Sources...)
 	c.Videos = append([]Video(nil), j.Videos...)
 	c.Discs = append([]Disc(nil), j.Discs...)
 	for i := range c.Discs {

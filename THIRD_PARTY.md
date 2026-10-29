@@ -36,6 +36,9 @@ files used by older candidates. The current helper source recipe is in
 `scripts/toolchain/README.md`. No bit-identical reproduction claim is made; the
 matching source and all our build changes are supplied.
 
-HCenc, AviSynth, FFMS2, and mpeg2enc are optional benchmark inputs and are not
+HCenc is the default video backend for new jobs; its private AviSynth/FFMS2
+runtime is installed separately. The setup helper preserves upstream notices and
+records pinned download hashes. These binaries are not part of the normal app
+package. mpeg2enc remains an optional benchmark input. These components are not
 distributed by easyDVD. No encoder superiority claim is made without a
 completed comparison on representative material.

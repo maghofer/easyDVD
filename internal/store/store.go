@@ -101,7 +101,8 @@ func (s *Store) Settings(fallback model.Settings) (model.Settings, error) {
 	if err != nil {
 		return fallback, err
 	}
-	var v model.Settings
+	// New pending jobs adopt current defaults; saved started jobs retain theirs.
+	v := fallback
 	err = json.Unmarshal(b, &v)
 	return v, err
 }

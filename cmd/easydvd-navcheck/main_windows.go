@@ -14,8 +14,8 @@ import (
 )
 
 func main() {
-	if len(os.Args) != 3 {
-		fmt.Fprintln(os.Stderr, "Usage: easydvd-navcheck VLC_DIRECTORY FIXTURE.iso (3 titles, 2 menu entries per page)")
+	if len(os.Args) != 3 && !(len(os.Args) == 4 && os.Args[3] == "--autoplay") {
+		fmt.Fprintln(os.Stderr, "Usage: easydvd-navcheck VLC_DIRECTORY FIXTURE.iso [--autoplay] (otherwise: 3 titles, 2 menu entries per page)")
 		os.Exit(2)
 	}
 	root, _ := filepath.Abs(os.Args[1])
@@ -24,7 +24,7 @@ func main() {
 	os.Setenv("VLC_PLUGIN_PATH", filepath.Join(root, "plugins"))
 	dll := windows.NewLazyDLL(filepath.Join(root, "libvlc.dll"))
 	call := func(name string, args ...uintptr) uintptr { r, _, _ := dll.NewProc(name).Call(args...); return r }
-	strings := []string{"--intf=dummy", "--vout=dummy", "--aout=dummy", "--ignore-config", "--no-media-library", "--no-video-title-show", "--quiet", "--file-caching=100", "--disc-caching=100"}
+	strings := []string{"--intf=dummy", "--vout=dummy", "--aout=dummy", "--avcodec-hw=none", "--ignore-config", "--no-media-library", "--no-video-title-show", "--quiet", "--file-caching=100", "--disc-caching=100"}
 	var ptrs []*byte
 	for _, s := range strings {
 		b, _ := windows.BytePtrFromString(s)
@@ -42,6 +42,9 @@ func main() {
 	media := call("libvlc_media_new_location", instance, uintptr(unsafe.Pointer(b)))
 	runtime.KeepAlive(b)
 	defer call("libvlc_media_release", media)
+	option, _ := windows.BytePtrFromString(":avcodec-hw=none")
+	call("libvlc_media_add_option", media, uintptr(unsafe.Pointer(option)))
+	runtime.KeepAlive(option)
 	player := call("libvlc_media_player_new_from_media", media)
 	defer call("libvlc_media_player_release", player)
 	defer call("libvlc_media_player_stop", player)
@@ -62,6 +65,19 @@ func main() {
 		time.Sleep(120 * time.Millisecond)
 	}
 	call("libvlc_media_player_play", player)
+	if len(os.Args) == 4 {
+		waitTitle(1, 5*time.Second)
+		fmt.Println("Automatic first play: title", title())
+		end := time.Now().Add(15 * time.Second)
+		for time.Now().Before(end) {
+			if state() == 6 {
+				fmt.Println("Playback ended without a menu; PASS")
+				return
+			}
+			time.Sleep(30 * time.Millisecond)
+		}
+		panic(fmt.Sprintf("autoplay did not finish, title %d state %d", title(), state()))
+	}
 	waitTitle(0, 5*time.Second)
 	time.Sleep(500 * time.Millisecond)
 	fmt.Println("Initial menu: title", title(), "chapter", int32(call("libvlc_media_player_get_chapter", player)))

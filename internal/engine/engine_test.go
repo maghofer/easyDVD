@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"easydvd/internal/fsops"
 	"easydvd/internal/media"
 	"easydvd/internal/model"
 	"easydvd/internal/store"
@@ -10,6 +11,22 @@ import (
 	"testing"
 	"time"
 )
+
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "--fs-worker" {
+		if err := fsops.Worker(os.Args[2:], os.Stdout); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	if len(os.Args) > 2 && os.Args[1] == "--scan-worker" {
+		if err := media.ScanWorker(os.Args[2], os.Args[3:], os.Stdout); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 func TestRecoverAndLockSettings(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "q.db"))
@@ -114,6 +131,82 @@ func TestBulkExclusionIsAtomicAndPersisted(t *testing.T) {
 			t.Fatal("rejected bulk edit mutated the job")
 		}
 	}
+}
+
+func TestExcludingFailedFilesUnblocksJob(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "q.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	s := model.DefaultSettings(t.TempDir())
+	j := model.Job{ID: model.ID(), State: model.Blocked, ScanComplete: true, Settings: s, Error: "One or more videos could not be inspected; retry or exclude them", Videos: []model.Video{{ID: "good", Duration: 10}, {ID: "bad", Error: "not a video"}}}
+	if err = st.Save([]model.Job{j}); err != nil {
+		t.Fatal(err)
+	}
+	e, err := New(st, s, media.Tools{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	if err = e.SetExcluded(j.ID, []string{"bad"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.Snapshot().Jobs[0]; got.State != model.Ready || got.Error != "" {
+		t.Fatal(got)
+	}
+	include := false
+	if err = e.Edit(j.ID, "", "bad", "", &include); err != nil {
+		t.Fatal(err)
+	}
+	if e.Snapshot().Jobs[0].State != model.Blocked {
+		t.Fatal("re-included failure was accepted")
+	}
+	exclude := true
+	if err = e.Edit(j.ID, "", "bad", "", &exclude); err != nil {
+		t.Fatal(err)
+	}
+	if e.Snapshot().Jobs[0].State != model.Ready {
+		t.Fatal("per-file exclusion did not unblock")
+	}
+	if err = e.SetExcluded(j.ID, []string{"good"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if e.Snapshot().Jobs[0].State != model.Blocked {
+		t.Fatal("empty job became ready")
+	}
+}
+
+func TestInvalidNoMenuJobStaysEditable(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "q.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	s := model.DefaultSettings(t.TempDir())
+	s.NoMenu = true
+	j := model.Job{ID: model.ID(), State: model.Ready, ScanComplete: true, Settings: s, Videos: []model.Video{{ID: "one", Duration: 10}, {ID: "two", Duration: 10}}}
+	if err = st.Save([]model.Job{j}); err != nil {
+		t.Fatal(err)
+	}
+	e, err := New(st, s, media.Tools{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	e.Start()
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		got := e.Snapshot().Jobs[0]
+		if got.State == model.Blocked {
+			if got.Locked {
+				t.Fatal("invalid no-menu choice locked settings")
+			}
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("invalid no-menu job was not blocked")
 }
 
 func TestClearQueueStopsWorkersAndKeepsFiles(t *testing.T) {

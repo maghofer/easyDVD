@@ -15,6 +15,7 @@ the separate sources ZIP is not needed to run the app.
 
 - **Batch processing:** queue several folders at once. Each added folder becomes
   its own DVD set, including its subfolders. Each video file becomes a DVD title.
+  Drop individual videos too; multiple files can share a set or become separate jobs.
 - **Automatic disc layout:** spread videos across as many discs as needed. Keep
   filename order, or choose space efficiency to make better use of disc space.
   Videos stay whole; a file that cannot fit on one disc is reported.
@@ -22,7 +23,8 @@ the separate sources ZIP is not needed to run the app.
   fonts and colors, and save presets. Menus include title selection, page
   navigation and Play All.
 - **DVD format choices:** PAL or NTSC, DVD-5 or DVD-9, with 4:3 and 16:9 video
-  handled automatically.
+  handled automatically. Confirmed 4:3 footage inside black 16:9 side borders is
+  cropped without stretching. Single-title jobs can start playback without a menu.
 - **Pause and resume:** save the queue and continue later, reusing completed
   encodes. Errors are shown against the affected folder so other sets can continue.
 
@@ -45,9 +47,15 @@ using easyDVD.
 1. Extract the complete Windows ZIP and open **easyDVD.exe**. Keep the `tools`
    folder beside it.
 2. Drag folders into the window or use **Add folders**. Review the videos and
-   choose an output folder and a local work folder with enough free space.
+   choose an output folder and a local work folder with enough free space. You can
+   also drop video files. Hold Shift while selecting files to select a range.
 3. Choose your TV standard, disc capacity and menu style, then select
    **Start / resume**. Finished ISO files appear in your output folder.
+
+New jobs use HCenc for two-pass MPEG-2 video. Set up its private runtime as
+described in [Encoder setup](docs/ENCODERS.md), or choose **FFmpeg** under
+**Settings → Video encoder**. For a single included video, **Job settings →
+Playback → No menu** creates a disc that starts automatically and stops at the end.
 
 For more on menu appearance and presets, see [Menu settings](docs/MENUS.md).
 Report problems or suggest changes through [GitHub Issues](https://github.com/maghofer/easyDVD/issues).

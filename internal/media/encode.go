@@ -44,7 +44,7 @@ func HashFile(ctx context.Context, path string) (string, error) {
 }
 
 func ValidArtifact(ctx context.Context, v model.Video, s model.Settings) bool {
-	if v.Encoded == "" || v.EncodingKey != s.EncodingKey()+v.Fingerprint() {
+	if v.Encoded == "" || v.EncodingKey != v.ArtifactKey(s) {
 		return false
 	}
 	st, e := os.Stat(v.Encoded)
@@ -62,10 +62,11 @@ func VideoFilter(v model.Video, s model.Settings) (string, bool) {
 	}
 	h := s.Height()
 	w, scaledH := 720, h
-	if v.DAR > target {
-		scaledH = int(math.Round(float64(h)*target/v.DAR/2)) * 2
+	dar := v.ContentDAR()
+	if dar > target {
+		scaledH = int(math.Round(float64(h)*target/dar/2)) * 2
 	} else {
-		w = int(math.Round(720*v.DAR/target/2)) * 2
+		w = int(math.Round(720*dar/target/2)) * 2
 	}
 	if w < 2 {
 		w = 2
@@ -77,6 +78,9 @@ func VideoFilter(v model.Video, s model.Settings) (string, bool) {
 	matching := s.Standard == "PAL" && math.Abs(v.FPS-25) < .02 || s.Standard == "NTSC" && math.Abs(v.FPS-30000.0/1001) < .02
 	keep := interlaced && matching && v.Rotation == 0
 	filters := []string{}
+	if v.CropLeft+v.CropRight > 0 {
+		filters = append(filters, fmt.Sprintf("crop=%d:%d:%d:0", v.Width-v.CropLeft-v.CropRight, v.Height, v.CropLeft))
+	}
 	if interlaced && !keep {
 		filters = append(filters, "bwdif=mode=send_frame:parity=auto:deint=all")
 	}
@@ -132,6 +136,11 @@ func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, 
 }
 
 func (t Tools) Encode(ctx context.Context, v model.Video, s model.Settings, input, dir string, log io.Writer, progress func(float64)) (model.Video, error) {
+	var err error
+	v, err = t.DetectPillarbox(ctx, v, input, log)
+	if err != nil {
+		return v, err
+	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return v, err
 	}
@@ -142,22 +151,28 @@ func (t Tools) Encode(ctx context.Context, v model.Video, s model.Settings, inpu
 	if runtime.GOOS == "windows" {
 		null = "NUL"
 	}
-	for pass := 1; pass <= 2; pass++ {
-		out := null
-		if pass == 2 {
-			out = part
-		}
-		p := pass
-		err := process.Run(ctx, t.FFmpeg, EncodeArgs(v, s, input, passlog, out, pass), process.Options{Dir: dir, Log: log, Line: func(line string) {
-			if strings.HasPrefix(line, "out_time_us=") {
-				us, _ := strconv.ParseFloat(strings.TrimPrefix(line, "out_time_us="), 64)
-				if progress != nil {
-					progress(math.Min(1, (float64(p-1)+us/1e6/v.Duration)/2))
-				}
-			}
-		}})
-		if err != nil {
+	if s.Encoder() == "HCenc" {
+		if err := t.encodeHCenc(ctx, v, s, input, dir, log, progress); err != nil {
 			return v, err
+		}
+	} else {
+		for pass := 1; pass <= 2; pass++ {
+			out := null
+			if pass == 2 {
+				out = part
+			}
+			p := pass
+			err := process.Run(ctx, t.FFmpeg, EncodeArgs(v, s, input, passlog, out, pass), process.Options{Dir: dir, Log: log, Line: func(line string) {
+				if strings.HasPrefix(line, "out_time_us=") {
+					us, _ := strconv.ParseFloat(strings.TrimPrefix(line, "out_time_us="), 64)
+					if progress != nil {
+						progress(math.Min(1, (float64(p-1)+us/1e6/v.Duration)/2))
+					}
+				}
+			}})
+			if err != nil {
+				return v, err
+			}
 		}
 	}
 	// A complete decode catches truncated streams before they become reusable checkpoints.
@@ -173,7 +188,7 @@ func (t Tools) Encode(ctx context.Context, v model.Video, s model.Settings, inpu
 	}
 	v.Encoded = final
 	v.EncodedSize = st.Size()
-	v.EncodingKey = s.EncodingKey() + v.Fingerprint()
+	v.EncodingKey = v.ArtifactKey(s)
 	v.EncodedHash, err = HashFile(ctx, final)
 	return v, err
 }
@@ -181,11 +196,15 @@ func (t Tools) Encode(ctx context.Context, v model.Video, s model.Settings, inpu
 func (t Tools) Thumbnail(ctx context.Context, v model.Video, input, path string, log io.Writer) error {
 	seconds := math.Min(v.Duration*.25, 30)
 	w, h := 320, 240
-	if v.DAR >= 4.0/3 {
-		h = max(2, int(math.Round(320/v.DAR/2))*2)
+	dar := v.ContentDAR()
+	if dar >= 4.0/3 {
+		h = max(2, int(math.Round(320/dar/2))*2)
 	} else {
-		w = max(2, int(math.Round(240*v.DAR/2))*2)
+		w = max(2, int(math.Round(240*dar/2))*2)
 	}
 	filter := fmt.Sprintf("scale=%d:%d:flags=lanczos,pad=320:240:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h)
+	if v.CropLeft+v.CropRight > 0 {
+		filter = fmt.Sprintf("crop=%d:%d:%d:0,", v.Width-v.CropLeft-v.CropRight, v.Height, v.CropLeft) + filter
+	}
 	return process.Run(ctx, t.FFmpeg, []string{"-hide_banner", "-nostdin", "-y", "-ss", fmt.Sprintf("%.3f", seconds), "-i", input, "-map", fmt.Sprintf("0:%d", v.VideoStream), "-vf", filter, "-frames:v", "1", "-update", "1", path}, process.Options{Log: log})
 }

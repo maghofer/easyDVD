@@ -72,3 +72,17 @@ func TestAuthorNavigation(t *testing.T) {
 		t.Fatal("navigation must not generate a disc-wide jump-pad command table", x)
 	}
 }
+
+func TestMenuFreeFirstPlay(t *testing.T) {
+	s := model.DefaultSettings(t.TempDir())
+	s.NoMenu = true
+	x := AuthorXML([]model.Video{{Encoded: filepath.Join("work", "a & b.mpg"), DAR: 4.0 / 3}}, nil, s, "work")
+	for _, want := range []string{"<fpc>jump title 1;</fpc>", "<post>exit;</post>", "a &amp; b.mpg"} {
+		if !strings.Contains(x, want) {
+			t.Fatal(x)
+		}
+	}
+	if strings.Contains(x, "<menus>") || strings.Contains(x, "page-") || strings.Contains(x, "<button") {
+		t.Fatal(x)
+	}
+}

@@ -14,6 +14,11 @@ import (
 )
 
 func AuthorXML(videos []model.Video, pages []menu.Page, s model.Settings, dir string) string {
+	if s.NoMenu && len(videos) == 1 {
+		v := videos[0]
+		relative, _ := filepath.Rel(dir, v.Encoded)
+		return fmt.Sprintf("<dvdauthor dest=\"dvd\"><vmgm><fpc>jump title 1;</fpc></vmgm><titleset><titles><video format=\"%s\" aspect=\"%s\"/><audio format=\"ac3\" channels=\"2\" samplerate=\"48khz\"/><pgc><vob file=\"%s\"/><post>exit;</post></pgc></titles></titleset></dvdauthor>\n", strings.ToLower(s.Standard), v.Aspect(), menu.Escape(filepath.ToSlash(relative)))
+	}
 	var b strings.Builder
 	b.WriteString("<dvdauthor dest=\"dvd\">\n<vmgm><fpc>g0 = 0; g3 = 1024; jump vmgm menu 1;</fpc><menus>\n")
 	aspect := s.Menu.Defaults().Aspect
@@ -84,12 +89,19 @@ func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total i
 	if len(videos) == 0 {
 		return "", fmt.Errorf("cannot author an empty disc")
 	}
-	if err := stage("Creating menus"); err != nil {
-		return "", err
+	if j.Settings.NoMenu && (len(j.ActiveVideos()) != 1 || len(videos) != 1) {
+		return "", fmt.Errorf("no menu requires exactly one included video")
 	}
-	pages, err := menu.Render(dir, j.Title, disc.Number, total, videos, j.Settings)
-	if err != nil {
-		return "", err
+	var pages []menu.Page
+	var err error
+	if !j.Settings.NoMenu {
+		if err = stage("Creating menus"); err != nil {
+			return "", err
+		}
+		pages, err = menu.Render(dir, j.Title, disc.Number, total, videos, j.Settings)
+		if err != nil {
+			return "", err
+		}
 	}
 	for _, p := range pages {
 		if err := stage(fmt.Sprintf("Creating menu page %d of %d", p.Number, len(pages))); err != nil {

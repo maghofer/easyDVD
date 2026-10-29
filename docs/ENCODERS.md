@@ -1,8 +1,53 @@
 # MPEG-2 encoder comparison
 
-FFmpeg software `mpeg2video` is the implemented production default. It is not
-declared the universal quality winner. Final choice should be based on actual
-film scans, especially moving grain and fine texture.
+HCenc is the default video encoder for new jobs. It uses the BEST profile and
+two-pass VBR at 8 Mbps average / 9 Mbps maximum. FFmpeg remains available in
+Settings / Video encoder. Existing started jobs retain their previous encoder
+and compatible saved encodes. Neither encoder is declared a universal quality
+winner; review actual film scans, especially moving grain and fine texture.
+
+## HCenc setup
+
+HCenc 0.28 requires **32-bit** AviSynth and FFMS2 even though easyDVD itself is
+64-bit. These components are installed separately from the normal portable app.
+The pinned setup helper downloads and verifies all three components, preserves
+their notices and creates a private runtime without changing system AviSynth:
+
+```powershell
+./scripts/prepare-hcenc.ps1 -OutputDir C:\Tools\easyDVD-HCenc
+```
+
+7-Zip is required for setup. Choose the resulting directory in Settings / HCenc
+folder, or put it at `tools/hcenc` beside easyDVD.exe. Developers can run the
+script without `-OutputDir` to use the detected `.tools/hcenc/bin` directory.
+The runtime ZIP includes the same setup script; running it without `-OutputDir`
+there installs into `tools/hcenc`, which the app detects automatically.
+`EASYDVD_HCENC` and CLI `-hcenc-dir` are also supported. The directory contains
+`HCenc_028.exe`, `AviSynth.dll` and `ffms2.dll`; mismatched 64-bit components are
+rejected. Windows may need the Microsoft Visual C++ x86 runtime used by these
+upstream components. A missing HCenc setup is reported explicitly; choose
+FFmpeg in Settings to use the existing encoder instead.
+
+FFmpeg prepares DVD-resolution frames in a lossless FFV1 intermediate, preserving
+the chosen crop, aspect, cadence and interlacing. HCenc performs both VBR passes
+in one invocation. Its log must confirm both passes and the full prepared frame
+count. FFmpeg encodes AC-3 audio (or silence for silent sources), muxes the DVD
+stream and fully decodes it before checkpointing. Temporary lossless files are
+removed after each encode attempt; the space estimate includes simultaneous
+lossless intermediates. HCenc's progress advances at preparation and encoding
+boundaries, so the displayed percentage can remain steady during either pass.
+
+## Automatic pillarbox removal
+
+For 16:9 input, easyDVD checks every decoded frame before resizing. It removes
+only symmetric black side borders that leave the full centered 4:3 picture.
+A single frame with picture content outside that area prevents cropping.
+The check uses per-pixel luminance with a two-level tolerance above nominal
+8-bit black for compression residue, retaining 16-bit analysis precision.
+Uncertain or noisier borders keep the original frame. Letterbox bars are retained.
+The cropped picture's actual display aspect controls scaling and DVD aspect;
+rounding differences are padded rather than stretched. The border check adds a
+decoding pass for new 16:9 encodes; completed compatible checkpoints are reused.
 
 ## Repeatable harness
 
@@ -18,16 +63,15 @@ represented by fabricated results.
 ./bin/easydvd-benchmark.exe -input C:\Scans\sample.mov -output C:\Benchmarks\trial-02 -mpeg2enc C:\Tools\mpeg2enc.exe -hcenc C:\Tools\HCenc.exe -ffms2 C:\Tools\ffms2.dll
 ```
 
-HCenc requires a working, matching-bitness AviSynth installation and FFMS2 plugin.
-These are optional benchmark tools and are not bundled into the app. Candidate
-backends must be validated with the user's installed versions before using their
-results. The harness does not switch the app's production encoder automatically.
+The benchmark's optional `-hcenc` / `-ffms2` paths are independent of the app's
+encoder setting and require the same matching-bitness AviSynth runtime. The
+harness does not switch the app's encoder automatically.
 
 | Candidate | Initial settings | Integration considerations |
 |---|---|---|
-| FFmpeg software MPEG-2 | Two-pass, 8 Mbps average, 9 Mbps peak, DVD VBV/GOP | Native current toolchain; implemented and tested |
+| FFmpeg software MPEG-2 | Two-pass, 8 Mbps average, 9 Mbps peak, DVD VBV/GOP | Available alternative; implemented and tested |
 | mpeg2enc | DVD preset, quality 2, 8 Mbps maximum, progressive reference | Direct Y4M input; compare actual sizes because its rate-control target differs |
-| HCenc | BEST profile, 8 Mbps average, 9 Mbps maximum | DVD-focused; AviSynth/FFMS2 dependency and bitness requirements |
+| HCenc | BEST profile, two-pass, 8 Mbps average, 9 Mbps maximum | Default for new jobs; private x86 AviSynth/FFMS2 runtime |
 
 ## Evaluation
 

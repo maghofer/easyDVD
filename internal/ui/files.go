@@ -65,6 +65,37 @@ func (u *window) buildFileList() fyne.CanvasObject {
 }
 
 func (u *window) setFileSelected(id string, selected bool) {
+	shift := false
+	if driver, ok := u.app.Driver().(desktop.Driver); ok {
+		shift = driver.CurrentKeyModifiers()&fyne.KeyModifierShift != 0
+	}
+	u.selectFileRange(id, selected, shift)
+}
+
+func (u *window) selectFileRange(id string, selected, shift bool) {
+	if shift && u.selectionAnchor != "" {
+		if j := u.selectedJob(); j != nil {
+			anchor, target := -1, -1
+			for i, v := range j.Videos {
+				if v.ID == u.selectionAnchor {
+					anchor = i
+				}
+				if v.ID == id {
+					target = i
+				}
+			}
+			if anchor >= 0 && target >= 0 {
+				for i := min(anchor, target); i <= max(anchor, target); i++ {
+					// Shift always selects the inclusive range, even if the endpoint was selected.
+					u.selectedFiles[j.Videos[i].ID] = true
+				}
+				u.refreshFileSelection()
+				u.files.Refresh()
+				return
+			}
+		}
+	}
+	u.selectionAnchor = id
 	if selected {
 		u.selectedFiles[id] = true
 	} else {
@@ -82,6 +113,7 @@ func (u *window) refreshFileSelection() {
 	}
 	if u.selectionJob != jobID {
 		u.selectionJob = jobID
+		u.selectionAnchor = ""
 		clear(u.selectedFiles)
 		u.files.UnselectAll()
 		u.files.ScrollToTop()

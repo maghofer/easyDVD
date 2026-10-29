@@ -33,6 +33,9 @@ func ScanWorker(root string, exclude []string, out io.Writer) error {
 			return err
 		}
 		if d.IsDir() {
+			if d.Name() == "__MACOSX" {
+				return filepath.SkipDir
+			}
 			for _, x := range exclude {
 				if x != "" && filepath.Clean(path) == filepath.Clean(x) {
 					return filepath.SkipDir
