@@ -9,10 +9,13 @@ import (
 
 func TestSnapshotIsIndependent(t *testing.T) {
 	j := Job{Videos: []Video{{Label: "Original"}}, Discs: []Disc{{VideoIDs: []string{"one"}}}}
+	mode := true
+	j.NoMenuOverride = &mode
 	s := j.Clone()
 	s.Videos[0].Label = "Changed"
 	s.Discs[0].VideoIDs[0] = "two"
-	if j.Videos[0].Label != "Original" || j.Discs[0].VideoIDs[0] != "one" {
+	*s.NoMenuOverride = false
+	if j.Videos[0].Label != "Original" || j.Discs[0].VideoIDs[0] != "one" || !*j.NoMenuOverride {
 		t.Fatal("snapshot shares mutable state")
 	}
 }

@@ -89,7 +89,7 @@ func (u *window) menuSettings(id string) fyne.Window {
 	status.Wrapping = fyne.TextWrapWord
 	scope := widget.NewLabel("Changes apply to this pending job. Presets are available for any new set.")
 	if id == "" {
-		scope.SetText("Defaults apply to new and pending jobs.")
+		scope.SetText("Saved defaults apply to new jobs. Existing jobs keep their own menu settings.")
 	} else if job.Locked {
 		scope.SetText("Started/finished set: preview changes and save presets here. Apply defaults for new jobs; existing ISOs stay unchanged.")
 	}

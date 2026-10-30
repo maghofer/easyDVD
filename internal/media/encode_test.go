@@ -87,3 +87,17 @@ func TestMenuFreeFirstPlay(t *testing.T) {
 		t.Fatal(x)
 	}
 }
+
+func TestMenuFreeMultipleTitlesKeepOrderAndAspect(t *testing.T) {
+	s := model.DefaultSettings(t.TempDir())
+	s.NoMenu = true
+	x := AuthorXML([]model.Video{{Encoded: "a.mpg", DAR: 4.0 / 3}, {Encoded: "b.mpg", DAR: 16.0 / 9}, {Encoded: "c.mpg", DAR: 4.0 / 3}}, nil, s, ".")
+	for _, want := range []string{"<fpc>jump title 1;</fpc>", "<pre>jump title 2;</pre>", "<pre>jump title 3;</pre>", "<post>call vmgm menu 2;</post>", "<post>call vmgm menu 3;</post>", "<post>exit;</post>", "aspect=\"16:9\""} {
+		if !strings.Contains(x, want) {
+			t.Fatal(want, x)
+		}
+	}
+	if strings.Count(x, "<titleset>") != 3 || strings.Contains(x, "<button") || strings.Contains(x, "page-") {
+		t.Fatal("autoplay created visible menus or merged video aspects", x)
+	}
+}

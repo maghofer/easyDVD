@@ -9,13 +9,14 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"time"
 	"unsafe"
 )
 
 func main() {
-	if len(os.Args) != 3 && !(len(os.Args) == 4 && os.Args[3] == "--autoplay") {
-		fmt.Fprintln(os.Stderr, "Usage: easydvd-navcheck VLC_DIRECTORY FIXTURE.iso [--autoplay] (otherwise: 3 titles, 2 menu entries per page)")
+	if len(os.Args) != 3 && !((len(os.Args) == 4 || len(os.Args) == 5) && os.Args[3] == "--autoplay") {
+		fmt.Fprintln(os.Stderr, "Usage: easydvd-navcheck VLC_DIRECTORY FIXTURE.iso [--autoplay [TITLE_COUNT]] (otherwise: 3 titles, 2 menu entries per page)")
 		os.Exit(2)
 	}
 	root, _ := filepath.Abs(os.Args[1])
@@ -65,9 +66,21 @@ func main() {
 		time.Sleep(120 * time.Millisecond)
 	}
 	call("libvlc_media_player_play", player)
-	if len(os.Args) == 4 {
+	if len(os.Args) >= 4 {
+		count := 1
+		if len(os.Args) == 5 {
+			var err error
+			count, err = strconv.Atoi(os.Args[4])
+			if err != nil || count < 1 || count > 99 {
+				panic("TITLE_COUNT must be 1–99")
+			}
+		}
 		waitTitle(1, 5*time.Second)
 		fmt.Println("Automatic first play: title", title())
+		for i := 2; i <= count; i++ {
+			waitTitle(i, 5*time.Second)
+			fmt.Println("Automatic next title:", title())
+		}
 		end := time.Now().Add(15 * time.Second)
 		for time.Now().Before(end) {
 			if state() == 6 {

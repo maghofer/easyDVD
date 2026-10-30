@@ -10,7 +10,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/widget"
 )
 
 func (u *window) jobDetails() {
@@ -37,13 +36,9 @@ func (u *window) jobDetails() {
 			fmt.Fprintf(&text, "\n%s:\n%s\n", v.Relative, v.Error)
 		}
 	}
-	summary := widget.NewMultiLineEntry()
-	summary.SetText(text.String())
-	summary.Disable()
-	logText := widget.NewMultiLineEntry()
-	logText.SetText("Loading job log…")
-	logText.Disable()
-	tabs := container.NewAppTabs(container.NewTabItem("Job and disc assignments", container.NewScroll(summary)), container.NewTabItem("Log (last 64 KB)", container.NewScroll(logText)))
+	_, summary := newReadOnlyText(text.String())
+	logText, logView := newReadOnlyText("Loading job log…")
+	tabs := container.NewAppTabs(container.NewTabItem("Job and disc assignments", container.NewScroll(summary)), container.NewTabItem("Log (last 64 KB)", container.NewScroll(logView)))
 	d := dialog.NewCustom("Job details", "Close", tabs, u.win)
 	d.Resize(fyne.NewSize(850, 620))
 	d.Show()

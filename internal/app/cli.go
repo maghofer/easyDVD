@@ -65,7 +65,7 @@ func CLI(args []string) error {
 	direct := fs.Bool("direct", false, "Read original sources directly")
 	keep := fs.Bool("keep-work", false, "Retain intermediate media")
 	thumbs := fs.Bool("thumbnails", false, "Thumbnail menus")
-	noMenu := fs.Bool("no-menu", false, "Start playback automatically; requires one included video per job")
+	noMenu := fs.Bool("no-menu", false, "Play all included videos automatically in order without a menu")
 	combine := fs.Bool("combine-files", false, "Combine explicit video files into one DVD set")
 	perPage := fs.Int("titles", 10, "Titles per page (1–12 text, 1–6 thumbnails)")
 	tools := fs.Bool("check-tools", false, "Print tool diagnostics and exit")

@@ -9,12 +9,13 @@ import (
 	"time"
 )
 
-func TestNoMenuOnlySelectableForSingleVideoJob(t *testing.T) {
+func TestNoMenuCanOverrideMultipleAndSingleVideoDefaults(t *testing.T) {
 	u := fileListFixture(t)
 	j := u.selectedJob()
 	u.settingsDialog(j.ID, j.Settings)
 	var noMenu *widget.Check
 	var cancel *widget.Button
+	var menuButton *widget.Button
 	find := func(object fyne.CanvasObject) {
 		switch w := object.(type) {
 		case *widget.Check:
@@ -22,14 +23,25 @@ func TestNoMenuOnlySelectableForSingleVideoJob(t *testing.T) {
 				noMenu = w
 			}
 		case *widget.Button:
+			if w.Text == "Edit menu…" {
+				menuButton = w
+			}
 			if w.Text == "Cancel" {
 				cancel = w
 			}
 		}
 	}
 	walkFileTestObjects(u.win.Canvas().Overlays().Top(), find)
-	if noMenu == nil || !noMenu.Disabled() {
-		t.Fatal("multiple-video job offered no-menu playback")
+	if noMenu == nil || noMenu.Disabled() || menuButton == nil || menuButton.Disabled() {
+		t.Fatal("multiple-video job does not offer playback choices")
+	}
+	noMenu.SetChecked(true)
+	if !menuButton.Disabled() {
+		t.Fatal("menu editor enabled with no menu selected")
+	}
+	noMenu.SetChecked(false)
+	if menuButton.Disabled() {
+		t.Fatal("menu editor did not enable again")
 	}
 	test.Tap(cancel)
 	var ids []string
@@ -54,6 +66,9 @@ func TestNoMenuOnlySelectableForSingleVideoJob(t *testing.T) {
 		t.Fatal("single-video playback option unavailable")
 	}
 	noMenu.SetChecked(true)
+	if !menuButton.Disabled() {
+		t.Fatal("single-video menu editor enabled while no menu selected")
+	}
 	test.Tap(save)
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
@@ -63,4 +78,34 @@ func TestNoMenuOnlySelectableForSingleVideoJob(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatal("no-menu choice was not saved")
+}
+
+func TestMultiVideoNoMenuChoicePersistsAndDisablesMenuEditor(t *testing.T) {
+	u := fileListFixture(t)
+	for _, checked := range []bool{true, false} {
+		u.snapshot = u.engine.Snapshot()
+		u.settingsDialog(u.selected, u.selectedJob().Settings)
+		fields, buttons := settingsFields(u)
+		noMenu := fields["Playback"].(*widget.Check)
+		menuButton := buttons["Edit menu…"]
+		if menuButton.Disabled() != noMenu.Checked {
+			t.Fatal("persisted menu editor state disagrees with playback mode")
+		}
+		noMenu.SetChecked(checked)
+		if menuButton.Disabled() != checked {
+			t.Fatal("menu editor did not follow checkbox")
+		}
+		test.Tap(buttons["Save settings"])
+		deadline := time.Now().Add(3 * time.Second)
+		for {
+			j := u.engine.Snapshot().Jobs[0]
+			if j.Settings.NoMenu == checked && j.NoMenuOverride != nil && u.win.Canvas().Overlays().Top() == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("explicit playback choice was not saved")
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+	}
 }

@@ -20,6 +20,9 @@ func AuthorXML(videos []model.Video, pages []menu.Page, s model.Settings, dir st
 		relative, _ := filepath.Rel(dir, v.Encoded)
 		return fmt.Sprintf("<dvdauthor dest=\"dvd\"><vmgm><fpc>jump title 1;</fpc></vmgm><titleset><titles><video format=\"%s\" aspect=\"%s\"/><audio format=\"ac3\" channels=\"2\" samplerate=\"48khz\"/><pgc><vob file=\"%s\"/><post>exit;</post></pgc></titles></titleset></dvdauthor>\n", strings.ToLower(s.Standard), v.Aspect(), menu.Escape(filepath.ToSlash(relative)))
 	}
+	if s.NoMenu {
+		return autoplayXML(videos, s, dir)
+	}
 	var b strings.Builder
 	b.WriteString("<dvdauthor dest=\"dvd\">\n<vmgm><fpc>g0 = 0; g3 = 1024; jump vmgm menu 1;</fpc><menus>\n")
 	aspect := s.Menu.Defaults().Aspect
@@ -69,6 +72,35 @@ func AuthorXML(videos []model.Video, pages []menu.Page, s model.Settings, dir st
 	return b.String()
 }
 
+// Command-only VMGM chains route playback between titlesets, preserving mixed
+// aspect ratios without a visible menu or any rendered menu media. Each chain
+// contains one jump, so the DVD VM command limit does not grow with disc size.
+func autoplayXML(videos []model.Video, s model.Settings, dir string) string {
+	var b strings.Builder
+	b.WriteString("<dvdauthor dest=\"dvd\"><vmgm><fpc>jump title 1;</fpc><menus>")
+	fmt.Fprintf(&b, "<video format=\"%s\" aspect=\"4:3\"/>", strings.ToLower(s.Standard))
+	for i := range videos {
+		entry := ""
+		if i == 0 {
+			entry = " entry=\"title\""
+		}
+		fmt.Fprintf(&b, "<pgc%s><pre>jump title %d;</pre></pgc>", entry, i+1)
+	}
+	b.WriteString("</menus></vmgm>")
+	for i, v := range videos {
+		relative, _ := filepath.Rel(dir, v.Encoded)
+		fmt.Fprintf(&b, "<titleset><titles><video format=\"%s\" aspect=\"%s\"/><audio format=\"ac3\" channels=\"2\" samplerate=\"48khz\"/><pgc><vob file=\"%s\"/><post>", strings.ToLower(s.Standard), v.Aspect(), menu.Escape(filepath.ToSlash(relative)))
+		if i+1 < len(videos) {
+			fmt.Fprintf(&b, "call vmgm menu %d;", i+2)
+		} else {
+			b.WriteString("exit;")
+		}
+		b.WriteString("</post></pgc></titles></titleset>")
+	}
+	b.WriteString("</dvdauthor>\n")
+	return b.String()
+}
+
 func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total int, dir string, log io.Writer, stage func(string) error) (string, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", err
@@ -89,9 +121,6 @@ func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total i
 	}
 	if len(videos) == 0 {
 		return "", fmt.Errorf("cannot author an empty disc")
-	}
-	if j.Settings.NoMenu && (len(j.ActiveVideos()) != 1 || len(videos) != 1) {
-		return "", fmt.Errorf("no menu requires exactly one included video")
 	}
 	var related []string
 	for _, video := range videos {

@@ -84,6 +84,9 @@ func New(st *store.Store, defaults model.Settings, t media.Tools, options ...Opt
 			j.State = model.Paused
 			j.Stage = "Interrupted — resume to continue"
 		}
+		if j.ScanComplete && !j.Locked {
+			applyAutomaticMenu(j)
+		}
 	}
 	if err = st.Save(e.jobs); err != nil {
 		cancel()
@@ -167,6 +170,10 @@ func (e *Engine) Add(folder string) error {
 		}
 	}
 	j := model.Job{ID: model.ID(), Folder: absolute, Title: filepath.Base(absolute), State: model.Scanning, Stage: "Discovering videos", Settings: e.settings, Created: time.Now()}
+	if e.settings.NoMenu {
+		mode := true
+		j.NoMenuOverride = &mode
+	}
 	e.jobs = append(e.jobs, j)
 	e.persistLocked()
 	e.scanLocked(j.ID)
@@ -212,6 +219,10 @@ func (e *Engine) AddFiles(paths []string) error {
 		title = filepath.Base(filepath.Dir(sources[0]))
 	}
 	j := model.Job{ID: model.ID(), Folder: filepath.Dir(sources[0]), Sources: sources, Title: title, State: model.Scanning, Stage: "Inspecting selected videos", Settings: e.settings, Created: time.Now()}
+	if e.settings.NoMenu {
+		mode := true
+		j.NoMenuOverride = &mode
+	}
 	e.jobs = append(e.jobs, j)
 	e.persistLocked()
 	e.scanLocked(j.ID)
@@ -361,6 +372,7 @@ func (e *Engine) scanLocked(id string) {
 		j.State = model.Ready
 		j.Stage = "Ready"
 		j.Progress = 0
+		applyAutomaticMenu(j)
 		if err != nil {
 			j.State = model.Blocked
 			j.Error = err.Error()
@@ -509,17 +521,45 @@ func (e *Engine) Remove(id string) error {
 // them. Source files, saved encodes and published output are left intact. Jobs
 // added while cancellation is underway are not part of this clear operation.
 func (e *Engine) ClearQueue() error {
+	return e.removeJobs(nil, true)
+}
+
+// RemoveJobs stops and removes exactly the selected jobs, keeping their files.
+func (e *Engine) RemoveJobs(ids []string) error {
+	return e.removeJobs(ids, false)
+}
+
+func (e *Engine) removeJobs(jobIDs []string, all bool) error {
 	e.mu.Lock()
 	if e.clearing {
 		e.mu.Unlock()
 		return nil
 	}
+	ids := make(map[string]bool, len(e.jobs))
+	for _, id := range jobIDs {
+		if e.index(id) < 0 {
+			e.mu.Unlock()
+			return fmt.Errorf("selected job no longer exists")
+		}
+		ids[id] = true
+	}
+	if all {
+		for _, j := range e.jobs {
+			ids[j.ID] = true
+		}
+	}
+	if len(ids) == 0 {
+		e.mu.Unlock()
+		return nil
+	}
+	resume := e.enabled && !all
 	e.clearing = true
 	e.enabled = false
-	ids := make(map[string]bool, len(e.jobs))
 	for k := range e.jobs {
 		j := &e.jobs[k]
-		ids[j.ID] = true
+		if !ids[j.ID] {
+			continue
+		}
 		if cancel := e.cancels[j.ID]; cancel != nil {
 			cancel()
 		}
@@ -528,7 +568,7 @@ func (e *Engine) ClearQueue() error {
 		}
 		if j.State != model.Complete {
 			j.State = model.Canceled
-			j.Stage = "Stopping — clearing queue"
+			j.Stage = "Stopping — removing from queue"
 		}
 	}
 	e.persistLocked()
@@ -536,6 +576,9 @@ func (e *Engine) ClearQueue() error {
 	defer func() {
 		e.mu.Lock()
 		e.clearing = false
+		if resume && e.ctx.Err() == nil && e.lastError == "" {
+			e.enabled = true
+		}
 		e.signal()
 		e.mu.Unlock()
 	}()
@@ -651,11 +694,22 @@ func (e *Engine) SetExcluded(id string, videoIDs []string, excluded bool) error 
 	return nil
 }
 
+// The first inspected collection, and later inclusion changes, choose a useful
+// default. A manual menu/no-menu choice takes precedence and survives rescans.
+func applyAutomaticMenu(j *model.Job) {
+	if j.NoMenuOverride != nil {
+		j.Settings.NoMenu = *j.NoMenuOverride
+		return
+	}
+	j.Settings.NoMenu = len(j.ActiveVideos()) == 1
+}
+
 func (e *Engine) refreshReadinessLocked(j *model.Job) {
 	if !j.ScanComplete || (j.State != model.Ready && j.State != model.Blocked) {
 		return
 	}
 	active := j.ActiveVideos()
+	applyAutomaticMenu(j)
 	if len(active) == 0 {
 		j.State, j.Error = model.Blocked, "No included video files"
 		return
@@ -666,14 +720,20 @@ func (e *Engine) refreshReadinessLocked(j *model.Job) {
 			return
 		}
 	}
-	if j.Settings.NoMenu && len(active) != 1 {
-		j.State, j.Error = model.Blocked, "No menu requires exactly one included video; enable menus or exclude the other files"
-		return
-	}
 	j.State, j.Stage, j.Error = model.Ready, "Ready", ""
 }
 
 func (e *Engine) SetSettings(id string, s model.Settings) error {
+	return e.setSettings(id, s, false)
+}
+
+// SetJobSettings records a deliberate playback-mode choice, even if it matches
+// the current automatic default for the job's number of included videos.
+func (e *Engine) SetJobSettings(id string, s model.Settings) error {
+	return e.setSettings(id, s, true)
+}
+
+func (e *Engine) setSettings(id string, s model.Settings, explicitPlayback bool) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
@@ -684,13 +744,6 @@ func (e *Engine) SetSettings(id string, s model.Settings) error {
 			return err
 		}
 		e.settings = s
-		for i := range e.jobs {
-			if !e.jobs[i].Locked && e.jobs[i].State != model.Complete {
-				e.jobs[i].Settings = s
-				e.refreshReadinessLocked(&e.jobs[i])
-				e.estimateLocked(&e.jobs[i])
-			}
-		}
 	} else {
 		i := e.index(id)
 		if i < 0 {
@@ -698,6 +751,10 @@ func (e *Engine) SetSettings(id string, s model.Settings) error {
 		}
 		if e.jobs[i].Locked {
 			return fmt.Errorf("settings were locked when this job started; add the folder again for different encoding settings")
+		}
+		if explicitPlayback || e.jobs[i].Settings.NoMenu != s.NoMenu {
+			mode := s.NoMenu
+			e.jobs[i].NoMenuOverride = &mode
 		}
 		e.jobs[i].Settings = s
 		e.refreshReadinessLocked(&e.jobs[i])
@@ -770,13 +827,6 @@ func (e *Engine) loop() {
 				break
 			}
 			j := e.jobs[i]
-			if j.Settings.NoMenu && len(j.ActiveVideos()) != 1 {
-				e.jobs[i].State = model.Blocked
-				e.jobs[i].Error = "No menu requires exactly one included video; enable menus or exclude the other files"
-				e.persistLocked()
-				e.mu.Unlock()
-				continue
-			}
 			ctx, cancel := context.WithCancel(e.ctx)
 			e.cancels[j.ID] = cancel
 			delete(e.pauses, j.ID)
@@ -934,9 +984,6 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 	videos := j.ActiveVideos()
 	if len(videos) == 0 {
 		return fmt.Errorf("no included videos")
-	}
-	if j.Settings.NoMenu && len(videos) != 1 {
-		return fmt.Errorf("no menu requires exactly one included video; enable menus or exclude the other files")
 	}
 	for _, v := range videos {
 		if v.Error != "" && v.Duration <= 0 {

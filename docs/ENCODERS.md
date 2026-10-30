@@ -5,8 +5,8 @@ external: locate a compatible installation or accept the app's private download.
 There is no separate encoder runtime to install.
 
 **Balanced is the default for new jobs.** Choose Balanced or Quality directly
-in the job header before processing starts. The choice is saved per job; started
-jobs keep their locked profile. Settings also offers the default for new/pending
+in Job settings before processing starts. The choice is saved per job; started
+jobs keep their locked profile. Default settings also offers the default for new
 jobs. CLI and benchmark accept `-profile Balanced` or `-profile Quality`.
 
 | Profile | Video target / peak | Stereo AC-3 | Intended use |

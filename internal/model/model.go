@@ -245,6 +245,7 @@ type Job struct {
 	Videos         []Video    `json:"videos"`
 	Discs          []Disc     `json:"discs"`
 	Settings       Settings   `json:"settings"`
+	NoMenuOverride *bool      `json:"no_menu_override,omitempty"`
 	Locked         bool       `json:"locked"`
 	ScanComplete   bool       `json:"scan_complete"`
 	Discovered     int        `json:"discovered"`
@@ -277,6 +278,10 @@ func (j Job) Duration() float64 {
 }
 func (j Job) Clone() Job {
 	c := j
+	if j.NoMenuOverride != nil {
+		mode := *j.NoMenuOverride
+		c.NoMenuOverride = &mode
+	}
 	c.Sources = append([]string(nil), j.Sources...)
 	c.Videos = append([]Video(nil), j.Videos...)
 	c.Discs = append([]Disc(nil), j.Discs...)

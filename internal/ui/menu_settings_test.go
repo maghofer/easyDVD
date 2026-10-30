@@ -15,9 +15,6 @@ import (
 
 func TestMenuSettingsApplyPreviewAndPresets(t *testing.T) {
 	u := fileListFixture(t)
-	if u.preview.Text != "Menu" {
-		t.Fatal("job button must open menu settings")
-	}
 	w := u.menuSettings(u.selected)
 	if w == nil {
 		t.Fatal("missing menu settings")

@@ -52,14 +52,27 @@ using easyDVD.
 3. Choose your TV standard, disc capacity and menu style, then select
    **Start / resume**. Finished ISO files appear in your output folder.
 
+Save **Default settings** for future jobs. Each new job takes a copy; existing
+jobs keep their settings. Use **Job settings** to override the TV standard,
+disc capacity, output folder and menu options for one job. Menu layout and
+titles per page live in **Menu**.
+
+Job tiles show status and completion percentage. Click a tile to select it;
+Ctrl-click toggles additional jobs and Shift-click selects a
+range. Files use the same selection behavior. Use **Remove selected** or **Delete**.
+The X on a tile removes that job. Removing active jobs asks to stop them first;
+source and output files are kept. Overall progress appears in the bottom bar.
+
 FFmpeg performs two-pass MPEG-2 encoding. **Balanced** is the default, targeting
 7.5 Mbps video with 256 kbps AC-3 audio for speed and smaller files. Choose
-**Quality** in the job header for 9 Mbps video, 448 kbps audio and more detailed
+**Quality** in Job settings for 9 Mbps video, 448 kbps audio and more detailed
 analysis. easyDVD adds discs instead of reducing the chosen profile's bitrate to
 squeeze more footage onto one disc. FFmpeg remains an external dependency;
 first run can locate it or download a private copy. See [Encoding quality](docs/ENCODERS.md).
-For a single included video, **Job settings → Playback → No menu** creates a
-disc that starts automatically and stops at the end.
+Single-video jobs default to automatic playback without a menu; multi-video
+jobs default to a menu. Override either choice in **Job settings → Playback**.
+With **No menu**, every disc plays its included videos in order and stops at
+the end. Menu editing is disabled until menus are enabled again.
 
 For more on menu appearance and presets, see [Menu settings](docs/MENUS.md).
 Report problems or suggest changes through [GitHub Issues](https://github.com/maghofer/easyDVD/issues).
