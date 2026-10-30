@@ -20,7 +20,7 @@ func TestJobTitleGetsAvailableWidth(t *testing.T) {
 	w.Resize(fyne.NewSize(1160, 780))
 	u.refresh()
 	w.Show()
-	if u.title.Text != j.Title || u.title.Size().Width < 200 {
+	if u.title.Text != j.Title || u.title.Size().Width < fyne.MeasureText(j.Title, 14, u.title.TextStyle).Width {
 		t.Fatalf("title was squeezed out: text=%q size=%v", u.title.Text, u.title.Size())
 	}
 	if !u.dropBar.Visible() || u.empty.Visible() {

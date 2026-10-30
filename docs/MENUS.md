@@ -1,6 +1,7 @@
 # Menu settings
 
-Choose **Menu** on a folder job, or **Settings → Menu settings** for defaults.
+Choose **Job settings → Menu → Edit menu**, or
+**Default settings → Menu defaults** for defaults.
 The window contains parameters and an automatic preview, with DVD and page
 selectors. It is not a freeform editor. Only the requested page is rendered;
 typing and sliders use a short debounce. Thumbnail extraction happens in the
@@ -29,10 +30,15 @@ Validated assets are copied into local application data so a removed or changed
 original does not break queued jobs or presets. Keep these assets with application
 data; they are persistent, unlike generated menu graphics in the work directory.
 
-**Apply to job** updates a pending job. **Save as defaults** updates new and
-unstarted jobs. Started/finished jobs keep their snapshot; their Menu window can
+**Apply to job** updates a pending job. **Save as defaults** updates future jobs.
+Existing jobs keep their snapshot; a Menu window opened for a started/finished set can
 preview alternative settings and save presets without rewriting their ISO files.
 Nothing changes until an Apply/Save action is selected. Finished output folders
 continue to contain only ISOs.
+
+Single-video jobs default to no menu, and multi-video jobs default to a menu.
+Both can be overridden in Job settings. With **No menu** selected, the menu
+editor button is disabled, and each disc plays its included videos in order
+before stopping. Uncheck **No menu** to enable the editor again.
 
 The CLI accepts `-menu-aspect 4:3` or `-menu-aspect 16:9`.

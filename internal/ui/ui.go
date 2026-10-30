@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"image/color"
-	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
@@ -50,35 +48,41 @@ func (professionalTheme) Size(name fyne.ThemeSizeName) float32 {
 }
 
 type window struct {
-	mediaReady                                                       bool
-	mediaChecking                                                    bool
-	mediaIssue                                                       string
-	mediaDialog                                                      dialog.Dialog
-	dropBar                                                          *fyne.Container
-	app                                                              fyne.App
-	win                                                              fyne.Window
-	engine                                                           *engine.Engine
-	snapshot                                                         engine.Snapshot
-	selected                                                         string
-	selectionJob                                                     string
-	selectedFiles                                                    map[string]bool
-	fileHints                                                        *fyne.Container
-	selectAll                                                        *widget.Check
-	selectionCount                                                   *widget.Label
-	excludeSelected, includeSelected                                 *widget.Button
-	queue, files                                                     *widget.List
-	title, meta, stage, status, source                               *widget.Label
-	progress                                                         *widget.ProgressBar
-	scanProgress                                                     *widget.ProgressBarInfinite
-	headerJob                                                        string
-	headerExpanded                                                   bool
-	headerInfo, jobHeader                                            *fyne.Container
-	jobSummary, jobState, activity                                   *widget.Label
-	headerToggle, jobWarning, clear                                  *widget.Button
-	details                                                          *fyne.Container
-	empty                                                            *fyne.Container
-	start, pause, cancel, retry, settings, preview, remove, up, down *widget.Button
-	closed                                                           chan struct{}
+	mediaReady                                              bool
+	mediaChecking                                           bool
+	mediaIssue                                              string
+	mediaDialog                                             dialog.Dialog
+	dropBar                                                 *fyne.Container
+	app                                                     fyne.App
+	win                                                     fyne.Window
+	engine                                                  *engine.Engine
+	snapshot                                                engine.Snapshot
+	selected                                                string
+	selectionJob                                            string
+	selectionAnchor                                         string
+	selectedFiles                                           map[string]bool
+	selectedJobs                                            map[string]bool
+	jobSelectionAnchor                                      string
+	jobSelectAll                                            *widget.Button
+	jobSelectionCount                                       *widget.Label
+	fileHints                                               *fyne.Container
+	selectAll                                               *widget.Button
+	selectionCount                                          *widget.Label
+	excludeSelected, includeSelected                        *widget.Button
+	queue                                                   *jobList
+	files                                                   *fileList
+	title, status, source                                   *widget.Label
+	queueProgress                                           *thinProgress
+	queuePosition, queuePercent                             *widget.Label
+	footerProgress                                          *fyne.Container
+	jobHeader                                               *fyne.Container
+	jobSummary, jobOutput                                   *widget.Label
+	jobWarning, clear                                       *widget.Button
+	renameJob                                               *fileAction
+	details                                                 *fyne.Container
+	empty                                                   *fyne.Container
+	start, pause, cancel, retry, settings, remove, up, down *widget.Button
+	closed                                                  chan struct{}
 }
 
 func ShowStartupError(err error) {
@@ -121,6 +125,7 @@ func Run() error {
 		if !u.ensureMedia() {
 			return
 		}
+		var paths []string
 		for _, uri := range uris {
 			if uri.Scheme() != "file" {
 				continue
@@ -130,8 +135,9 @@ func Run() error {
 				p = p[1:]
 			}
 			p = filepath.FromSlash(p)
-			u.action(func() error { return e.Add(p) })
+			paths = append(paths, p)
 		}
+		u.addDroppedPaths(paths)
 	})
 	w.SetCloseIntercept(func() {
 		s := u.snapshot
@@ -222,39 +228,16 @@ func (u *window) build() fyne.CanvasObject {
 	})
 	u.start.Importance = widget.HighImportance
 	u.pause = widget.NewButtonWithIcon("Pause", theme.MediaPauseIcon(), func() { u.action(func() error { u.engine.Pause(); return nil }) })
-	preferences := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), func() { u.settingsDialog("", u.snapshot.Settings) })
-	diagnostics := widget.NewButtonWithIcon("Tools", theme.InfoIcon(), u.diagnostics)
+	preferences := widget.NewButtonWithIcon("Default settings", theme.SettingsIcon(), func() { u.settingsDialog("", u.snapshot.Settings) })
+	diagnostics := newFileAction(u, nil, "Media tools")
+	diagnostics.SetText("!")
+	diagnostics.Importance = widget.MediumImportance
+	diagnostics.OnTapped = u.diagnostics
 	controls := container.NewCenter(container.NewHBox(u.start, u.pause, preferences, diagnostics))
 	top := container.NewVBox(container.NewBorder(nil, nil, brand, controls), widget.NewSeparator())
-	u.queue = widget.NewList(func() int { return len(u.snapshot.Jobs) }, func() fyne.CanvasObject {
-		a := widget.NewLabelWithStyle("Folder", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-		a.Truncation = fyne.TextTruncateEllipsis
-		b := widget.NewLabel("Ready")
-		b.Truncation = fyne.TextTruncateEllipsis
-		return container.NewVBox(a, b)
-	}, func(i widget.ListItemID, o fyne.CanvasObject) {
-		if i >= len(u.snapshot.Jobs) {
-			return
-		}
-		j := u.snapshot.Jobs[i]
-		c := o.(*fyne.Container)
-		c.Objects[0].(*widget.Label).SetText(j.Title)
-		c.Objects[1].(*widget.Label).SetText(fmt.Sprintf("%s · %d videos", j.State, len(j.Videos)))
-	})
-	u.queue.OnSelected = func(i widget.ListItemID) {
-		if i < len(u.snapshot.Jobs) {
-			u.selected = u.snapshot.Jobs[i].ID
-			u.refresh()
-		}
-	}
-	u.up = widget.NewButtonWithIcon("", theme.MoveUpIcon(), func() { id := u.selected; u.action(func() error { u.engine.Move(id, -1); return nil }) })
-	u.down = widget.NewButtonWithIcon("", theme.MoveDownIcon(), func() { id := u.selected; u.action(func() error { u.engine.Move(id, 1); return nil }) })
-	u.remove = widget.NewButtonWithIcon("Remove", theme.DeleteIcon(), func() { id := u.selected; u.action(func() error { return u.engine.Remove(id) }) })
-	u.clear = widget.NewButtonWithIcon("Clear queue", theme.DeleteIcon(), u.clearQueue)
-	queueHeading := container.NewBorder(nil, nil, nil, u.clear, widget.NewLabelWithStyle("Queue", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
-	queue := container.NewBorder(container.NewVBox(queueHeading, widget.NewSeparator()), container.NewHBox(u.up, u.down, layout.NewSpacer(), u.remove), nil, nil, u.queue)
-	dropLabel := widget.NewLabelWithStyle("Drop folders here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	sub := widget.NewLabelWithStyle("One folder → one DVD set  ·  Subfolders included", fyne.TextAlignCenter, fyne.TextStyle{})
+	queue := u.buildJobList()
+	dropLabel := widget.NewLabelWithStyle("Drop folders or video files here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
+	sub := widget.NewLabelWithStyle("Folders include subfolders · Group files into DVD sets", fyne.TextAlignCenter, fyne.TextStyle{})
 	border := canvas.NewRectangle(color.Transparent)
 	border.StrokeColor = theme.DisabledColor()
 	border.StrokeWidth = 1
@@ -271,7 +254,7 @@ func (u *window) build() fyne.CanvasObject {
 	largeBorder.StrokeColor = theme.DisabledColor()
 	largeBorder.StrokeWidth = 1
 	largeBorder.CornerRadius = 5
-	largeDrop := container.NewStack(largeBorder, container.NewPadded(container.NewVBox(layout.NewSpacer(), widget.NewLabelWithStyle("Drop folders here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), widget.NewLabelWithStyle("One folder → one DVD set · Subfolders included", fyne.TextAlignCenter, fyne.TextStyle{}), container.NewCenter(widget.NewButtonWithIcon("Add folders", theme.FolderOpenIcon(), u.addFolders)), layout.NewSpacer())))
+	largeDrop := container.NewStack(largeBorder, container.NewPadded(container.NewVBox(layout.NewSpacer(), widget.NewLabelWithStyle("Drop folders or video files here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), widget.NewLabelWithStyle("Folders include subfolders · Group files into DVD sets", fyne.TextAlignCenter, fyne.TextStyle{}), container.NewCenter(widget.NewButtonWithIcon("Add folders", theme.FolderOpenIcon(), u.addFolders)), layout.NewSpacer())))
 	u.empty = container.NewCenter(container.NewGridWrap(fyne.NewSize(510, 230), largeDrop))
 	u.dropBar = container.NewVBox(drop, widget.NewSeparator())
 	right := container.NewBorder(u.dropBar, nil, nil, nil, container.NewStack(u.empty, u.details))
@@ -279,7 +262,7 @@ func (u *window) build() fyne.CanvasObject {
 	split.Offset = .27
 	u.status = widget.NewLabel("Ready")
 	u.status.Truncation = fyne.TextTruncateEllipsis
-	content := container.NewPadded(container.NewBorder(top, container.NewVBox(widget.NewSeparator(), u.status), nil, nil, split))
+	content := container.NewPadded(container.NewBorder(top, u.buildStatusBar(), nil, nil, split))
 	u.fileHints = container.NewWithoutLayout()
 	return container.NewStack(content, u.fileHints)
 }
@@ -311,17 +294,9 @@ func enabled(w fyne.Disableable, on bool) {
 	}
 }
 func (u *window) refresh() {
-	u.queue.Refresh()
-	for index, job := range u.snapshot.Jobs {
-		if job.ID == u.selected {
-			u.queue.Select(index)
-			break
-		}
-	}
 	j := u.selectedJob()
 	if j == nil && len(u.snapshot.Jobs) > 0 {
 		u.selected = u.snapshot.Jobs[0].ID
-		u.queue.Select(0)
 		j = u.selectedJob()
 	}
 	enabled(u.pause, u.snapshot.Enabled)
@@ -340,7 +315,6 @@ func (u *window) refresh() {
 	}
 	enabled(u.up, j != nil && !u.snapshot.Clearing)
 	enabled(u.down, j != nil && !u.snapshot.Clearing)
-	enabled(u.remove, j != nil && !u.snapshot.Clearing && j.State != model.Running && j.State != model.Scanning)
 	if j == nil {
 		u.selected = ""
 		u.details.Hide()
@@ -351,30 +325,39 @@ func (u *window) refresh() {
 		u.details.Show()
 		u.dropBar.Show()
 		enabled(u.settings, !j.Locked && !u.snapshot.Clearing)
-		enabled(u.preview, len(j.ActiveVideos()) > 0 && j.ScanComplete)
 		enabled(u.cancel, j.State != model.Complete && j.State != model.Canceled)
 		enabled(u.retry, u.mediaReady && !u.snapshot.Clearing && !u.snapshot.Busy[j.ID] && (j.State == model.Blocked || j.State == model.Paused || j.State == model.Canceled))
 	}
 	u.refreshJobHeader(j)
 	u.refreshFileSelection()
 	u.files.Refresh()
+	u.refreshJobSelection()
+	u.queue.Refresh()
 	counts := map[model.State]int{}
+	failed, attention := 0, 0
 	for _, j := range u.snapshot.Jobs {
 		counts[j.State]++
+		state, _ := jobAppearance(j)
+		if state == "Failed" {
+			failed++
+		} else if state == "Needs attention" {
+			attention++
+		}
 	}
-	status := fmt.Sprintf("%d sets · %d running · %d complete · %d need attention", len(u.snapshot.Jobs), counts[model.Running], counts[model.Complete], counts[model.Blocked])
+	status := fmt.Sprintf("%d jobs · %d completed · %d failed · %d need attention", len(u.snapshot.Jobs), counts[model.Complete], failed, attention)
 	if u.snapshot.Error != "" {
 		status = u.snapshot.Error
 	}
 	if u.snapshot.Clearing {
-		status = "Stopping active work and clearing the queue…"
+		status = "Stopping active work and removing jobs…"
 	}
 	if u.mediaChecking {
 		status = "Checking FFmpeg / FFprobe…"
 	} else if !u.mediaReady {
-		status = "FFmpeg setup required — use Tools to download or locate a compatible installation"
+		status = "FFmpeg setup required — use ! to download or locate a compatible installation"
 	}
 	u.status.SetText(status)
+	u.refreshStatusProgress()
 }
 
 func (u *window) rename() {
@@ -396,112 +379,6 @@ func (u *window) rename() {
 		}
 	}, u.win)
 }
-func (u *window) settingsDialog(id string, s model.Settings) {
-	standard := widget.NewSelect([]string{"PAL", "NTSC"}, nil)
-	standard.SetSelected(s.Standard)
-	medium := widget.NewSelect([]string{"DVD-5", "DVD-9"}, nil)
-	medium.SetSelected(s.Media)
-	packingMode := widget.NewSelect([]string{"Strict order", "Space efficiency"}, nil)
-	packingMode.SetSelected(s.Packing)
-	perPage := widget.NewEntry()
-	perPage.SetText(strconv.Itoa(s.TitlesPerPage))
-	menuLayout := widget.NewSelect([]string{"Text", "Thumbnails"}, func(v string) {
-		n, _ := strconv.Atoi(perPage.Text)
-		if v == "Thumbnails" && n > 6 {
-			perPage.SetText("6")
-		}
-	})
-	menuLayout.SetSelected(s.Layout)
-	stage := widget.NewCheck("Stage sources locally (recommended for network shares)", nil)
-	stage.SetChecked(s.StageLocally)
-	keep := widget.NewCheck("Keep intermediate media after success", nil)
-	keep.SetChecked(s.KeepWork)
-	workers := widget.NewSelect([]string{"1", "2"}, nil)
-	workers.SetSelected(strconv.Itoa(s.Encoders))
-	output := widget.NewEntry()
-	output.SetText(s.OutputDir)
-	work := widget.NewEntry()
-	work.SetText(s.WorkDir)
-	browse := func(entry *widget.Entry) {
-		u.action(func() error {
-			paths, err := platform.PickFolders(false)
-			if err == nil && len(paths) > 0 {
-				fyne.Do(func() { entry.SetText(paths[0]) })
-			}
-			return err
-		})
-	}
-	folder := func(entry *widget.Entry) fyne.CanvasObject {
-		return container.NewBorder(nil, nil, nil, widget.NewButtonWithIcon("", theme.FolderOpenIcon(), func() { browse(entry) }), entry)
-	}
-	appearance := widget.NewSelect([]string{"System", "Light", "Dark"}, nil)
-	appearance.SetSelected(s.Theme)
-	form := widget.NewForm(widget.NewFormItem("TV standard", standard), widget.NewFormItem("Disc capacity", medium), widget.NewFormItem("File allocation", packingMode), widget.NewFormItem("Menu layout", menuLayout), widget.NewFormItem("Titles per page", perPage), widget.NewFormItem("Encoding workers", workers), widget.NewFormItem("Output folder", folder(output)), widget.NewFormItem("Local work folder", folder(work)), widget.NewFormItem("Appearance", appearance))
-	note := "Applies to new and pending jobs. Started jobs retain their settings."
-	if id != "" {
-		note = "Settings for this folder. Locked when processing starts."
-	}
-	heading := widget.NewLabel(note + "\nQuality: two-pass MPEG-2, 8 Mbps average / 9 Mbps peak.")
-	heading.Wrapping = fyne.TextWrapWord
-	var d dialog.Dialog
-	save := func() {
-		n, err := strconv.Atoi(perPage.Text)
-		if err != nil {
-			dialog.ShowError(fmt.Errorf("titles per page must be a whole number"), u.win)
-			return
-		}
-		next := s
-		next.Standard = standard.Selected
-		next.Media = medium.Selected
-		next.Packing = packingMode.Selected
-		next.Layout = menuLayout.Selected
-		next.TitlesPerPage = n
-		next.Encoders, _ = strconv.Atoi(workers.Selected)
-		next.StageLocally = stage.Checked
-		next.KeepWork = keep.Checked
-		next.OutputDir = strings.TrimSpace(output.Text)
-		next.WorkDir = strings.TrimSpace(work.Text)
-		next.Theme = appearance.Selected
-		if err = next.Validate(); err != nil {
-			dialog.ShowError(err, u.win)
-			return
-		}
-		u.action(func() error {
-			err := u.engine.SetSettings(id, next)
-			if err == nil {
-				fyne.Do(func() {
-					if id == "" {
-						u.applyTheme(next.Theme)
-					}
-					d.Hide()
-				})
-			}
-			return err
-		})
-	}
-	buttons := container.NewHBox(layout.NewSpacer(), widget.NewButton("Cancel", func() { d.Hide() }), widget.NewButton("Save settings", save))
-	if id == "" {
-		buttons.Objects = append([]fyne.CanvasObject{widget.NewButton("Menu settings…", func() { d.Hide(); u.menuSettings("") })}, buttons.Objects...)
-		openLogs := widget.NewButtonWithIcon("Open logs folder", theme.FolderOpenIcon(), func() {
-			u.action(func() error {
-				if err := os.MkdirAll(u.engine.LogsDir(), 0755); err != nil {
-					return err
-				}
-				return platform.OpenFolder(u.engine.LogsDir())
-			})
-		})
-		buttons.Objects = append([]fyne.CanvasObject{openLogs}, buttons.Objects...)
-	}
-	options := container.NewVBox(form, stage, keep)
-	if id == "" {
-		options.Add(u.updateSettings())
-	}
-	content := container.NewBorder(heading, buttons, nil, nil, container.NewVScroll(options))
-	d = dialog.NewCustomWithoutButtons("Settings", content, u.win)
-	d.Resize(fyne.NewSize(740, 600))
-	d.Show()
-}
-
 func (u *window) diagnostics() {
 	holder := container.NewStack(widget.NewLabel("Checking bundled tools…"))
 	var d *dialog.CustomDialog
@@ -512,7 +389,8 @@ func (u *window) diagnostics() {
 	u.action(func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		statuses := u.engine.Tools().Check(ctx)
+		tools := u.engine.Tools()
+		statuses := tools.Check(ctx)
 		var text strings.Builder
 		for _, s := range statuses {
 			fmt.Fprintf(&text, "%s\n%s\n%s\n", s.Name, s.Path, s.Version)
@@ -522,10 +400,8 @@ func (u *window) diagnostics() {
 			text.WriteString("\n")
 		}
 		fyne.Do(func() {
-			entry := widget.NewMultiLineEntry()
-			entry.SetText(text.String())
-			entry.Disable()
-			holder.Objects = []fyne.CanvasObject{container.NewScroll(entry)}
+			_, view := newReadOnlyText(text.String())
+			holder.Objects = []fyne.CanvasObject{container.NewScroll(view)}
 			holder.Refresh()
 		})
 		return nil

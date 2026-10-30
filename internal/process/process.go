@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,22 @@ type Options struct {
 	Stdout io.Writer
 	Log    io.Writer
 	Line   func(string)
+}
+
+// Metrics reports process CPU time independently of wall time. CPUPercent is
+// normalized to all logical CPUs, matching system-wide CPU utilization displays.
+type Metrics struct {
+	Executable string   `json:"executable"`
+	Args       []string `json:"args"`
+	Seconds    float64  `json:"seconds"`
+	CPUSeconds float64  `json:"cpu_seconds"`
+	CPUPercent float64  `json:"cpu_percent"`
+}
+
+type observerKey struct{}
+
+func Observe(ctx context.Context, fn func(Metrics)) context.Context {
+	return context.WithValue(ctx, observerKey{}, fn)
 }
 
 func Run(ctx context.Context, exe string, args []string, opts Options) error {
@@ -75,6 +92,7 @@ func Run(ctx context.Context, exe string, args []string, opts Options) error {
 		return err
 	}
 	defer cleanup()
+	started := time.Now()
 	if err = cmd.Start(); err != nil {
 		return fmt.Errorf("start %s: %w", exe, err)
 	}
@@ -90,6 +108,11 @@ func Run(ctx context.Context, exe string, args []string, opts Options) error {
 		<-readDone
 	}
 	err = cmd.Wait()
+	if observer, ok := ctx.Value(observerKey{}).(func(Metrics)); ok && cmd.ProcessState != nil {
+		elapsed := time.Since(started).Seconds()
+		cpu := (cmd.ProcessState.UserTime() + cmd.ProcessState.SystemTime()).Seconds()
+		observer(Metrics{Executable: exe, Args: append([]string(nil), args...), Seconds: elapsed, CPUSeconds: cpu, CPUPercent: cpu / elapsed / float64(runtime.NumCPU()) * 100})
+	}
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}

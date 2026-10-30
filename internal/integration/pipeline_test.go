@@ -90,12 +90,17 @@ func TestPipeline(t *testing.T) {
 		}
 		original[f.name] = h
 	}
-	for _, standard := range []string{"PAL", "NTSC"} {
-		t.Run(standard, func(t *testing.T) {
+	for _, tc := range []struct{ profile, standard string }{
+		{model.ProfileBalanced, "PAL"}, {model.ProfileBalanced, "NTSC"},
+		{model.ProfileQuality, "PAL"}, {model.ProfileQuality, "NTSC"},
+	} {
+		profile, standard := tc.profile, tc.standard
+		t.Run(profile+"/"+standard, func(t *testing.T) {
 			s := model.DefaultSettings(dir)
 			s.Standard = standard
-			s.OutputDir = filepath.Join(dir, "output-"+standard)
-			s.WorkDir = filepath.Join(dir, "work-"+standard)
+			s.EncodingProfile = profile
+			s.OutputDir = filepath.Join(dir, "output-"+profile+"-"+standard)
+			s.WorkDir = filepath.Join(dir, "work-"+profile+"-"+standard)
 			s.TitlesPerPage = 2
 			s.KeepWork = true
 			s.Encoders = 1
@@ -106,7 +111,7 @@ func TestPipeline(t *testing.T) {
 				s.Media = "DVD-9"
 				s.Packing = "Space efficiency"
 			}
-			st, err := store.Open(filepath.Join(dir, standard+".db"))
+			st, err := store.Open(filepath.Join(dir, profile+"-"+standard+".db"))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -229,11 +234,15 @@ func TestPipeline(t *testing.T) {
 				}
 				var p struct {
 					Streams []struct {
-						Codec    string `json:"codec_name"`
-						Height   int    `json:"height"`
-						Channels int    `json:"channels"`
-						DAR      string `json:"display_aspect_ratio"`
-						Field    string `json:"field_order"`
+						Codec      string `json:"codec_name"`
+						Height     int    `json:"height"`
+						Channels   int    `json:"channels"`
+						DAR        string `json:"display_aspect_ratio"`
+						Field      string `json:"field_order"`
+						Pixel      string `json:"pix_fmt"`
+						Rate       string `json:"r_frame_rate"`
+						BitRate    string `json:"bit_rate"`
+						SampleRate string `json:"sample_rate"`
 					} `json:"streams"`
 					Format struct {
 						Duration string `json:"duration"`
@@ -244,6 +253,24 @@ func TestPipeline(t *testing.T) {
 				}
 				if len(p.Streams) < 2 || p.Streams[0].Codec != "mpeg2video" || p.Streams[0].Height != s.Height() || p.Streams[1].Codec != "ac3" || p.Streams[1].Channels != 2 {
 					t.Fatal(b.String())
+				}
+				if p.Streams[0].Pixel != "yuv420p" || media.Ratio(p.Streams[0].Rate) != media.Ratio(s.FPS()) || p.Streams[1].BitRate != fmt.Sprint(s.AudioBitrate()) || p.Streams[1].SampleRate != "48000" {
+					t.Fatal("DVD profile, frame rate or audio constraints violated", b.String())
+				}
+				// dvdvideo exposes IFO properties but does not report the MPEG-2
+				// sequence profile/level; inspect the encoded title itself for these.
+				var sequence bytes.Buffer
+				if err = process.Run(ctx, tools.FFprobe, []string{"-v", "error", "-select_streams", "v:0", "-show_entries", "stream=profile,level", "-of", "json", j.Videos[n-1].Encoded}, process.Options{Stdout: &sequence}); err != nil {
+					t.Fatal(err)
+				}
+				var seq struct {
+					Streams []struct {
+						Profile string
+						Level   int
+					}
+				}
+				if err = json.Unmarshal(sequence.Bytes(), &seq); err != nil || len(seq.Streams) != 1 || seq.Streams[0].Profile != "Main" || seq.Streams[0].Level != 8 {
+					t.Fatal("MPEG-2 Main Profile / Main Level required", sequence.String(), err)
 				}
 				if n == 3 && p.Streams[0].DAR != "16:9" {
 					t.Fatal("widescreen lost")

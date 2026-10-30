@@ -65,6 +65,8 @@ func CLI(args []string) error {
 	direct := fs.Bool("direct", false, "Read original sources directly")
 	keep := fs.Bool("keep-work", false, "Retain intermediate media")
 	thumbs := fs.Bool("thumbnails", false, "Thumbnail menus")
+	noMenu := fs.Bool("no-menu", false, "Play all included videos automatically in order without a menu")
+	combine := fs.Bool("combine-files", false, "Combine explicit video files into one DVD set")
 	perPage := fs.Int("titles", 10, "Titles per page (1–12 text, 1–6 thumbnails)")
 	tools := fs.Bool("check-tools", false, "Print tool diagnostics and exit")
 	authoringOnly := fs.Bool("check-authoring-tools", false, "Check bundled authoring tools without requiring FFmpeg")
@@ -72,6 +74,7 @@ func CLI(args []string) error {
 	downloadFFmpeg := fs.Bool("download-ffmpeg", false, "Download and remember the recommended private FFmpeg installation")
 	resume := fs.Bool("resume", false, "Resume saved queue")
 	workers := fs.Int("encoders", 2, "Parallel encoders (1–2)")
+	profile := fs.String("profile", model.ProfileBalanced, "Encoding profile: Balanced or Quality")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -123,7 +126,10 @@ func CLI(args []string) error {
 		defer cancel()
 		b, _ := json.MarshalIndent(t.Check(ctx), "", "  ")
 		fmt.Println(string(b))
-		return t.Require()
+		if err := t.Require(); err != nil {
+			return err
+		}
+		return nil
 	}
 	if *downloadFFmpeg && fs.NArg() == 0 && !*resume {
 		return t.Require()
@@ -142,7 +148,9 @@ func CLI(args []string) error {
 	defaults.Media = *medium
 	defaults.StageLocally = !*direct
 	defaults.KeepWork = *keep
+	defaults.NoMenu = *noMenu
 	defaults.Encoders = *workers
+	defaults.EncodingProfile = *profile
 	defaults.TitlesPerPage = *perPage
 	if *efficient {
 		defaults.Packing = "Space efficiency"
@@ -185,9 +193,16 @@ func CLI(args []string) error {
 			}
 		}
 	}
-	for _, folder := range fs.Args() {
-		if err = e.Add(folder); err != nil {
+	if *combine {
+		err = e.AddFiles(fs.Args())
+		if err != nil {
 			return err
+		}
+	} else {
+		for _, folder := range fs.Args() {
+			if err = e.Add(folder); err != nil {
+				return err
+			}
 		}
 	}
 	e.Start()

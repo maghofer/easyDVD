@@ -33,6 +33,10 @@ func (e *Engine) SetMenu(id string, style model.MenuStyle, layout string, count 
 	s.Menu = style
 	s.Layout = layout
 	s.TitlesPerPage = count
+	if id != "" {
+		s.NoMenu = false
+		return e.SetJobSettings(id, s)
+	}
 	return e.SetSettings(id, s)
 }
 

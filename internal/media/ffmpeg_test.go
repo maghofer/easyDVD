@@ -25,7 +25,7 @@ func fakeCapabilities(ff, probe, missing string) commandOutput {
 		case "-decoders":
 			return " V..... mpeg2video MPEG-2\n A..... ac3 AC3\n V..... png PNG\n", nil
 		case "-filters":
-			names := []string{"scale", "pad", "setsar", "fps", "bwdif", "apad", "anullsrc"}
+			names := []string{"scale", "pad", "setsar", "fps", "bwdif", "apad", "anullsrc", "crop", "bbox", "format"}
 			out := ""
 			for _, name := range names {
 				if name != missing {

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"easydvd/internal/fsops"
 	"easydvd/internal/media"
 	"easydvd/internal/model"
 	"easydvd/internal/store"
@@ -10,6 +11,22 @@ import (
 	"testing"
 	"time"
 )
+
+func TestMain(m *testing.M) {
+	if len(os.Args) > 1 && os.Args[1] == "--fs-worker" {
+		if err := fsops.Worker(os.Args[2:], os.Stdout); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	if len(os.Args) > 2 && os.Args[1] == "--scan-worker" {
+		if err := media.ScanWorker(os.Args[2], os.Args[3:], os.Stdout); err != nil {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+	os.Exit(m.Run())
+}
 
 func TestRecoverAndLockSettings(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "q.db"))
@@ -116,6 +133,111 @@ func TestBulkExclusionIsAtomicAndPersisted(t *testing.T) {
 	}
 }
 
+func TestExcludingFailedFilesUnblocksJob(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "q.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	s := model.DefaultSettings(t.TempDir())
+	j := model.Job{ID: model.ID(), State: model.Blocked, ScanComplete: true, Settings: s, Error: "One or more videos could not be inspected; retry or exclude them", Videos: []model.Video{{ID: "good", Duration: 10}, {ID: "bad", Error: "not a video"}}}
+	if err = st.Save([]model.Job{j}); err != nil {
+		t.Fatal(err)
+	}
+	e, err := New(st, s, media.Tools{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	if err = e.SetExcluded(j.ID, []string{"bad"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := e.Snapshot().Jobs[0]; got.State != model.Ready || got.Error != "" {
+		t.Fatal(got)
+	}
+	include := false
+	if err = e.Edit(j.ID, "", "bad", "", &include); err != nil {
+		t.Fatal(err)
+	}
+	if e.Snapshot().Jobs[0].State != model.Blocked {
+		t.Fatal("re-included failure was accepted")
+	}
+	exclude := true
+	if err = e.Edit(j.ID, "", "bad", "", &exclude); err != nil {
+		t.Fatal(err)
+	}
+	if e.Snapshot().Jobs[0].State != model.Ready {
+		t.Fatal("per-file exclusion did not unblock")
+	}
+	if err = e.SetExcluded(j.ID, []string{"good"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if e.Snapshot().Jobs[0].State != model.Blocked {
+		t.Fatal("empty job became ready")
+	}
+}
+
+func TestAutomaticMenuDefaultsAndManualOverrides(t *testing.T) {
+	st, err := store.Open(filepath.Join(t.TempDir(), "q.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	s := model.DefaultSettings(t.TempDir())
+	j := model.Job{ID: model.ID(), State: model.Ready, ScanComplete: true, Settings: s, Videos: []model.Video{{ID: "one", Duration: 10}, {ID: "two", Duration: 10}}}
+	if err := st.Save([]model.Job{j}); err != nil {
+		t.Fatal(err)
+	}
+	e, err := New(st, s, media.Tools{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	if err := e.SetExcluded(j.ID, []string{"two"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if !e.Snapshot().Jobs[0].Settings.NoMenu {
+		t.Fatal("single-video default must be automatic playback")
+	}
+	if err := e.SetExcluded(j.ID, []string{"two"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if e.Snapshot().Jobs[0].Settings.NoMenu {
+		t.Fatal("multi-video default must be a menu")
+	}
+	next := s
+	next.NoMenu = true
+	if err := e.SetJobSettings(j.ID, next); err != nil {
+		t.Fatal(err)
+	}
+	got := e.Snapshot().Jobs[0]
+	if got.State != model.Ready || !got.Settings.NoMenu || got.NoMenuOverride == nil {
+		t.Fatal("multi-video no-menu override was not accepted")
+	}
+	if err := e.SetExcluded(j.ID, []string{"two"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.SetExcluded(j.ID, []string{"two"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if !e.Snapshot().Jobs[0].Settings.NoMenu {
+		t.Fatal("automatic default replaced a manual choice")
+	}
+	if err := e.SetExcluded(j.ID, []string{"two"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.SetMenu(j.ID, s.Menu, s.Layout, s.TitlesPerPage); err != nil {
+		t.Fatal(err)
+	}
+	got = e.Snapshot().Jobs[0]
+	if got.Settings.NoMenu || got.NoMenuOverride == nil || *got.NoMenuOverride {
+		t.Fatal("single video could not be given a menu explicitly")
+	}
+	saved, err := st.Load()
+	if err != nil || saved[0].NoMenuOverride == nil || *saved[0].NoMenuOverride {
+		t.Fatal("manual choice was not persisted", err)
+	}
+}
 func TestClearQueueStopsWorkersAndKeepsFiles(t *testing.T) {
 	st, err := store.Open(filepath.Join(t.TempDir(), "q.db"))
 	if err != nil {
@@ -183,7 +305,7 @@ func TestClearQueueStopsWorkersAndKeepsFiles(t *testing.T) {
 	default:
 	}
 	// A folder explicitly added during cancellation belongs to the next queue.
-	newFolder := t.TempDir()
+	newFolder := filepath.Clean(t.TempDir())
 	if err := e.Add(newFolder); err != nil {
 		t.Fatal(err)
 	}
@@ -201,7 +323,7 @@ func TestClearQueueStopsWorkersAndKeepsFiles(t *testing.T) {
 	}
 	snapshot := e.Snapshot()
 	if snapshot.Clearing || snapshot.Enabled || len(snapshot.Jobs) != 1 || snapshot.Jobs[0].Folder != newFolder {
-		t.Fatal("clear queue did not remove exactly the original jobs")
+		t.Fatalf("clear queue did not remove exactly the original jobs: clearing=%v enabled=%v jobs=%+v expectedFolder=%q", snapshot.Clearing, snapshot.Enabled, snapshot.Jobs, newFolder)
 	}
 	saved, err := st.Load()
 	if err != nil || len(saved) != 1 || saved[0].Folder != newFolder {

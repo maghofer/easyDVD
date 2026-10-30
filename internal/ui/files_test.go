@@ -20,7 +20,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func fileListFixture(t *testing.T) *window {
+func fileListFixture(t *testing.T, extra ...model.Job) *window {
 	t.Helper()
 	a := test.NewApp()
 	t.Cleanup(a.Quit)
@@ -39,7 +39,15 @@ func fileListFixture(t *testing.T) *window {
 	j.Videos[2].Excluded = true
 	j.Videos[3].Error = "The video could not be inspected. The file is incomplete or damaged. Try a fresh copy of the source file, or exclude this file from the DVD set."
 	j.Videos[3].Duration = 0
-	if err := st.Save([]model.Job{j}); err != nil {
+	for i := range extra {
+		if extra[i].ID == "" {
+			extra[i].ID = model.ID()
+		}
+		if extra[i].Settings.Standard == "" {
+			extra[i].Settings = s
+		}
+	}
+	if err := st.Save(append([]model.Job{j}, extra...)); err != nil {
 		t.Fatal(err)
 	}
 	e, err := engine.New(st, s, media.Tools{})
@@ -115,9 +123,9 @@ func TestCompactHeaderAndFileRows(t *testing.T) {
 	if r.warning.Visible() || r.title.TextStyle.Italic || r.title.TextStyle.Strikethrough || r.state.Text != "" || !r.revert.Disabled() {
 		t.Fatal("recycled healthy row retained old state")
 	}
-	test.Tap(r.selectFile)
+	test.Tap(r)
 	if !u.selectedFiles["0"] || u.selectedFiles["3"] {
-		t.Fatal("recycled checkbox selected the wrong file")
+		t.Fatal("recycled row selected the wrong file")
 	}
 }
 
@@ -126,7 +134,7 @@ func TestFileSelectionBulkAndPerRowActions(t *testing.T) {
 	for _, index := range []int{0, 1} {
 		r := newFileRow(u)
 		r.update(u.selectedJob(), index)
-		test.Tap(r.selectFile)
+		u.selectFiles(r.id, fyne.KeyModifierControl)
 	}
 	if u.selectionCount.Text != "2 selected" || u.excludeSelected.Disabled() {
 		t.Fatal("multi-selection did not enable bulk exclusion")
@@ -158,16 +166,43 @@ func TestFileSelectionBulkAndPerRowActions(t *testing.T) {
 	if len(u.selectedFiles) != len(u.selectedJob().Videos) {
 		t.Fatal("select all missed files outside the visible rows")
 	}
-	test.Tap(u.selectAll)
-	if len(u.selectedFiles) != 0 || !u.excludeSelected.Disabled() {
-		t.Fatal("deselect all did not clear the selection")
+	u.selectFiles("0", 0)
+	if len(u.selectedFiles) != 1 {
+		t.Fatal("plain click did not replace Select all")
 	}
-	u.setFileSelected("0", true)
+	u.selectFiles("0", 0)
 	u.snapshot.Jobs = append(u.snapshot.Jobs, model.Job{ID: "another", State: model.Ready})
 	u.selected = "another"
 	u.refreshFileSelection()
 	if len(u.selectedFiles) != 0 {
 		t.Fatal("file selection leaked into another job")
+	}
+}
+
+func TestShiftSelectionUsesInclusiveAnchorAcrossRecycledRows(t *testing.T) {
+	u := fileListFixture(t)
+	u.selectFiles("4", 0)
+	u.selectFiles("16", fyne.KeyModifierShift)
+	if len(u.selectedFiles) != 13 {
+		t.Fatal(u.selectedFiles)
+	}
+	u.selectFiles("1", fyne.KeyModifierShift)
+	if len(u.selectedFiles) != 4 || u.selectionAnchor != "4" {
+		t.Fatal("reverse range moved the anchor", u.selectedFiles)
+	}
+	u.selectFiles("10", 0)
+	if !u.selectedFiles["10"] || len(u.selectedFiles) != 1 || u.selectionAnchor != "10" {
+		t.Fatal("plain click did not reset anchor")
+	}
+	u.selectFiles("12", fyne.KeyModifierShift)
+	if !u.selectedFiles["10"] || !u.selectedFiles["11"] || !u.selectedFiles["12"] {
+		t.Fatal("selected endpoint toggled range off")
+	}
+	u.snapshot.Jobs = append(u.snapshot.Jobs, model.Job{ID: "another", State: model.Ready})
+	u.selected = "another"
+	u.refreshFileSelection()
+	if u.selectionAnchor != "" || len(u.selectedFiles) != 0 {
+		t.Fatal("anchor leaked to another job")
 	}
 }
 
@@ -240,8 +275,8 @@ func TestFileListPreview(t *testing.T) {
 		t.Skip("visual preview not requested")
 	}
 	u := fileListFixture(t)
-	u.setFileSelected("0", true)
-	u.setFileSelected("1", true)
+	u.selectFiles("0", 0)
+	u.selectFiles("1", fyne.KeyModifierControl)
 	for _, appearance := range []string{"Light", "Dark"} {
 		u.applyTheme(appearance)
 		u.refresh()
@@ -255,7 +290,7 @@ func TestFileListPreview(t *testing.T) {
 		f.Close()
 		// Also inspect unselected stripes, warnings and many recycled rows together.
 		u.win.Resize(fyne.NewSize(1160, 980))
-		u.selectAll.SetChecked(false)
+		clear(u.selectedFiles)
 		u.refresh()
 		f, err = os.Create(filepath.Join(dir, "file-list-"+appearance+"-expanded.png"))
 		if err != nil {

@@ -36,6 +36,5 @@ files used by older candidates. The current helper source recipe is in
 `scripts/toolchain/README.md`. No bit-identical reproduction claim is made; the
 matching source and all our build changes are supplied.
 
-HCenc, AviSynth, FFMS2, and mpeg2enc are optional benchmark inputs and are not
-distributed by easyDVD. No encoder superiority claim is made without a
-completed comparison on representative material.
+FFmpeg is the sole video encoder. No AviSynth runtime or separately installed
+MPEG-2 encoder is required.

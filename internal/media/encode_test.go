@@ -34,9 +34,10 @@ func TestAspectAndInterlace(t *testing.T) {
 }
 func TestAudioAndDVDArgs(t *testing.T) {
 	s := model.DefaultSettings(t.TempDir())
+	s.EncodingProfile = model.ProfileQuality
 	v := model.Video{DAR: 4.0 / 3, Width: 720, Height: 576, Duration: 10, VideoStream: 2, AudioStream: -1}
 	args := strings.Join(EncodeArgs(v, s, "source", "pass", "video.mpg", 2), " ")
-	for _, want := range []string{"-pass 2", "-map 0:2", "anullsrc", "-map 1:a:0", "-af apad", "-b:v 8000k", "-maxrate:v 9000k", "-b:a 256k", "-f dvd", "-g 15"} {
+	for _, want := range []string{"-pass 2", "-map 0:2", "anullsrc", "-map 1:a:0", "-af apad", "-b:v 9000k", "-maxrate:v 9000k", "-b:a 448k", "-f dvd", "-g 15"} {
 		if !strings.Contains(args, want) {
 			t.Fatal(want, args)
 		}
@@ -70,5 +71,33 @@ func TestAuthorNavigation(t *testing.T) {
 	}
 	if strings.Contains(x, "jumppad=") || strings.Contains(x, "jump titleset") {
 		t.Fatal("navigation must not generate a disc-wide jump-pad command table", x)
+	}
+}
+
+func TestMenuFreeFirstPlay(t *testing.T) {
+	s := model.DefaultSettings(t.TempDir())
+	s.NoMenu = true
+	x := AuthorXML([]model.Video{{Encoded: filepath.Join("work", "a & b.mpg"), DAR: 4.0 / 3}}, nil, s, "work")
+	for _, want := range []string{"<fpc>jump title 1;</fpc>", "<post>exit;</post>", "a &amp; b.mpg"} {
+		if !strings.Contains(x, want) {
+			t.Fatal(x)
+		}
+	}
+	if strings.Contains(x, "<menus>") || strings.Contains(x, "page-") || strings.Contains(x, "<button") {
+		t.Fatal(x)
+	}
+}
+
+func TestMenuFreeMultipleTitlesKeepOrderAndAspect(t *testing.T) {
+	s := model.DefaultSettings(t.TempDir())
+	s.NoMenu = true
+	x := AuthorXML([]model.Video{{Encoded: "a.mpg", DAR: 4.0 / 3}, {Encoded: "b.mpg", DAR: 16.0 / 9}, {Encoded: "c.mpg", DAR: 4.0 / 3}}, nil, s, ".")
+	for _, want := range []string{"<fpc>jump title 1;</fpc>", "<pre>jump title 2;</pre>", "<pre>jump title 3;</pre>", "<post>call vmgm menu 2;</post>", "<post>call vmgm menu 3;</post>", "<post>exit;</post>", "aspect=\"16:9\""} {
+		if !strings.Contains(x, want) {
+			t.Fatal(want, x)
+		}
+	}
+	if strings.Count(x, "<titleset>") != 3 || strings.Contains(x, "<button") || strings.Contains(x, "page-") {
+		t.Fatal("autoplay created visible menus or merged video aspects", x)
 	}
 }

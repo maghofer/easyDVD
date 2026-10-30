@@ -14,62 +14,114 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
-func TestJobHeaderCollapsedAndExpandable(t *testing.T) {
+func TestJobHeaderHasFixedCompactInformation(t *testing.T) {
 	u := fileListFixture(t)
-	if u.headerExpanded || u.headerInfo.Visible() || u.progress.Visible() || u.scanProgress.Visible() || u.activity.Visible() {
-		t.Fatal("ready job header does not start collapsed without progress")
+	height := u.jobHeader.Size().Height
+	if height > 100 || u.files.Size().Height < 300 {
+		t.Fatalf("header is too tall: %v", u.jobHeader.Size())
 	}
-	collapsed := u.jobHeader.MinSize().Height
-	if collapsed > 100 || u.files.Size().Height < 300 {
-		t.Fatalf("collapsed header consumes too much space: header=%v list=%v", u.jobHeader.MinSize(), u.files.Size())
+	if !u.source.Visible() || u.source.Text != u.selectedJob().Folder || !u.settings.Visible() || !u.renameJob.Visible() {
+		t.Fatal("compact header hides job information or actions")
+	}
+	if !u.jobOutput.Visible() || u.jobOutput.Text != "Output: "+u.selectedJob().Settings.OutputDir {
+		t.Fatal("output folder is not shown in the compact header")
+	}
+	titlePos := u.app.Driver().AbsolutePositionForObject(u.title)
+	penPos := u.app.Driver().AbsolutePositionForObject(u.renameJob)
+	gap := penPos.X - titlePos.X - u.title.Size().Width
+	if gap < 0 || gap > 8 {
+		t.Fatalf("title-edit icon is not beside the title: gap=%v", gap)
+	}
+	var openOutput bool
+	var outputButton *widget.Button
+	walkFileTestObjects(u.jobHeader, func(object fyne.CanvasObject) {
+		if b, ok := object.(*widget.Button); ok && b.Text == "Open output" {
+			openOutput = true
+			outputButton = b
+		}
+		if b, ok := object.(*widget.Button); ok && b.Text == "Menu" {
+			t.Fatal("redundant menu button is still in the header")
+		}
+		if _, ok := object.(*widget.RadioGroup); ok {
+			t.Fatal("encoding controls are still in the header")
+		}
+		if label, ok := object.(*widget.Label); ok && label.Text == string(u.selectedJob().State) {
+			t.Fatal("job status is repeated in the header")
+		}
+	})
+	if !openOutput {
+		t.Fatal("output action has no text label")
+	}
+	settingsPos := u.app.Driver().AbsolutePositionForObject(u.settings)
+	outputPos := u.app.Driver().AbsolutePositionForObject(outputButton)
+	if settingsPos.Y != outputPos.Y {
+		t.Fatal("Job settings and Open output are not on the same row")
 	}
 	if !u.jobWarning.Visible() || u.jobWarning.Text != "1 file issue" {
-		t.Fatal("collapsing the header hid the file issue")
+		t.Fatal("file issue was hidden")
 	}
-	test.Tap(u.headerToggle)
-	if !u.headerExpanded || !u.headerInfo.Visible() || u.jobHeader.MinSize().Height <= collapsed+100 || u.source.Text != u.selectedJob().Folder {
-		t.Fatal("expanded job information is missing")
-	}
+	u.snapshot.Jobs[0].Folder = "C:/A very long source path containing a family video collection and several nested folders"
+	u.snapshot.Jobs[0].Settings.Standard = "NTSC"
+	u.snapshot.Jobs[0].Settings.Media = "DVD-9"
+	u.snapshot.Jobs[0].Settings.Packing = "Space efficiency"
+	u.snapshot.Jobs[0].Error = "A detailed error that must never expand the job header"
+	u.snapshot.Jobs[0].OutputPath = filepath.Join(t.TempDir(), "completed-output")
 	u.refresh()
-	if !u.headerExpanded {
-		t.Fatal("routine refresh collapsed the open header")
+	if u.jobOutput.Text != "Output: "+u.snapshot.Jobs[0].OutputPath {
+		t.Fatal("completed job does not show its actual output folder")
 	}
-	test.Tap(u.headerToggle)
-	if u.headerExpanded || u.headerInfo.Visible() || u.jobHeader.Size().Height > 100 || u.files.Size().Height < 300 {
-		t.Fatal("header cannot collapse again")
+	if u.jobHeader.Size().Height != height {
+		t.Fatal("header resized or lost format information")
 	}
-	test.Tap(u.headerToggle)
 	other := u.snapshot.Jobs[0].Clone()
 	other.ID = "another-job"
 	u.snapshot.Jobs = append(u.snapshot.Jobs, other)
 	u.selected = other.ID
 	u.refresh()
-	if u.headerExpanded || u.headerInfo.Visible() {
-		t.Fatal("a newly selected job did not default to collapsed")
+	if u.jobHeader.Size().Height != height {
+		t.Fatal("selecting another job changed header height")
 	}
 }
 
-func TestJobHeaderProgressFollowsActivity(t *testing.T) {
+func TestToolsUsesOnlyExclamationSymbol(t *testing.T) {
+	u := fileListFixture(t)
+	var symbol bool
+	walkFileTestObjects(u.win.Content(), func(object fyne.CanvasObject) {
+		if b, ok := object.(*fileAction); ok && b.hint == "Media tools" {
+			if b.Text != "!" || b.Icon != nil {
+				t.Fatal("tools control is not symbol-only")
+			}
+			symbol = true
+		}
+		if b, ok := object.(*widget.Button); ok && b.Text == "Tools" {
+			t.Fatal("old Tools label is still visible")
+		}
+	})
+	if !symbol {
+		t.Fatal("media tools control missing")
+	}
+}
+func TestFooterProgressFollowsActivity(t *testing.T) {
 	u := fileListFixture(t)
 	for _, tc := range []struct {
-		state                   model.State
-		progress                float64
-		bar, scanning, activity bool
+		state    model.State
+		progress float64
+		visible  bool
 	}{
-		{model.Scanning, 0, false, true, true},
-		{model.Ready, 0, false, false, false},
-		{model.Running, 0, true, false, true},
-		{model.Running, .45, true, false, true},
-		{model.Paused, .45, true, false, false},
-		{model.Paused, 0, false, false, false},
-		{model.Blocked, 0, false, false, false},
-		{model.Canceled, .3, false, false, false},
-		{model.Complete, 1, false, false, false},
+		{model.Scanning, 0, true},
+		{model.Ready, 0, false},
+		{model.Running, 0, true},
+		{model.Running, .45, true},
+		{model.Paused, .45, true},
+		{model.Paused, 0, false},
+		{model.Blocked, 0, false},
+		{model.Canceled, .3, false},
+		{model.Complete, 1, false},
 	} {
 		u.snapshot.Jobs[0].State = tc.state
 		u.snapshot.Jobs[0].Progress = tc.progress
 		u.refresh()
-		if u.progress.Visible() != tc.bar || u.scanProgress.Visible() != tc.scanning || u.scanProgress.Running() != tc.scanning || u.activity.Visible() != tc.activity {
+		if u.footerProgress.Visible() != tc.visible || u.jobHeader.Size().Height > 100 {
 			t.Fatalf("incorrect progress visibility for %s at %v", tc.state, tc.progress)
 		}
 	}
@@ -77,7 +129,7 @@ func TestJobHeaderProgressFollowsActivity(t *testing.T) {
 
 func TestClearQueueConfirmationAndEmptyState(t *testing.T) {
 	u := fileListFixture(t)
-	u.setFileSelected("0", true)
+	u.selectFiles("0", 0)
 	if u.clear.Disabled() {
 		t.Fatal("clear queue is disabled for a populated queue")
 	}
@@ -128,21 +180,14 @@ func TestJobHeaderPreview(t *testing.T) {
 	u := fileListFixture(t)
 	for _, appearance := range []string{"Light", "Dark"} {
 		u.applyTheme(appearance)
-		for _, expanded := range []bool{false, true} {
-			u.setHeaderExpanded(expanded)
-			u.refresh()
-			mode := "collapsed"
-			if expanded {
-				mode = "expanded"
-			}
-			f, err := os.Create(filepath.Join(dir, "job-header-"+appearance+"-"+mode+".png"))
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := png.Encode(f, u.win.Canvas().Capture()); err != nil {
-				t.Fatal(err)
-			}
-			f.Close()
+		u.refresh()
+		f, err := os.Create(filepath.Join(dir, "job-header-"+appearance+"-fixed.png"))
+		if err != nil {
+			t.Fatal(err)
 		}
+		if err := png.Encode(f, u.win.Canvas().Capture()); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
 	}
 }

@@ -10,10 +10,19 @@ import (
 
 	"easydvd/internal/menu"
 	"easydvd/internal/model"
+	"easydvd/internal/platform"
 	"easydvd/internal/process"
 )
 
 func AuthorXML(videos []model.Video, pages []menu.Page, s model.Settings, dir string) string {
+	if s.NoMenu && len(videos) == 1 {
+		v := videos[0]
+		relative, _ := filepath.Rel(dir, v.Encoded)
+		return fmt.Sprintf("<dvdauthor dest=\"dvd\"><vmgm><fpc>jump title 1;</fpc></vmgm><titleset><titles><video format=\"%s\" aspect=\"%s\"/><audio format=\"ac3\" channels=\"2\" samplerate=\"48khz\"/><pgc><vob file=\"%s\"/><post>exit;</post></pgc></titles></titleset></dvdauthor>\n", strings.ToLower(s.Standard), v.Aspect(), menu.Escape(filepath.ToSlash(relative)))
+	}
+	if s.NoMenu {
+		return autoplayXML(videos, s, dir)
+	}
 	var b strings.Builder
 	b.WriteString("<dvdauthor dest=\"dvd\">\n<vmgm><fpc>g0 = 0; g3 = 1024; jump vmgm menu 1;</fpc><menus>\n")
 	aspect := s.Menu.Defaults().Aspect
@@ -63,6 +72,35 @@ func AuthorXML(videos []model.Video, pages []menu.Page, s model.Settings, dir st
 	return b.String()
 }
 
+// Command-only VMGM chains route playback between titlesets, preserving mixed
+// aspect ratios without a visible menu or any rendered menu media. Each chain
+// contains one jump, so the DVD VM command limit does not grow with disc size.
+func autoplayXML(videos []model.Video, s model.Settings, dir string) string {
+	var b strings.Builder
+	b.WriteString("<dvdauthor dest=\"dvd\"><vmgm><fpc>jump title 1;</fpc><menus>")
+	fmt.Fprintf(&b, "<video format=\"%s\" aspect=\"4:3\"/>", strings.ToLower(s.Standard))
+	for i := range videos {
+		entry := ""
+		if i == 0 {
+			entry = " entry=\"title\""
+		}
+		fmt.Fprintf(&b, "<pgc%s><pre>jump title %d;</pre></pgc>", entry, i+1)
+	}
+	b.WriteString("</menus></vmgm>")
+	for i, v := range videos {
+		relative, _ := filepath.Rel(dir, v.Encoded)
+		fmt.Fprintf(&b, "<titleset><titles><video format=\"%s\" aspect=\"%s\"/><audio format=\"ac3\" channels=\"2\" samplerate=\"48khz\"/><pgc><vob file=\"%s\"/><post>", strings.ToLower(s.Standard), v.Aspect(), menu.Escape(filepath.ToSlash(relative)))
+		if i+1 < len(videos) {
+			fmt.Fprintf(&b, "call vmgm menu %d;", i+2)
+		} else {
+			b.WriteString("exit;")
+		}
+		b.WriteString("</post></pgc></titles></titleset>")
+	}
+	b.WriteString("</dvdauthor>\n")
+	return b.String()
+}
+
 func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total int, dir string, log io.Writer, stage func(string) error) (string, error) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", err
@@ -84,12 +122,25 @@ func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total i
 	if len(videos) == 0 {
 		return "", fmt.Errorf("cannot author an empty disc")
 	}
-	if err := stage("Creating menus"); err != nil {
-		return "", err
+	var related []string
+	for _, video := range videos {
+		related = append(related, video.Encoded)
 	}
-	pages, err := menu.Render(dir, j.Title, disc.Number, total, videos, j.Settings)
-	if err != nil {
-		return "", err
+	toolDir, cleanup, dirErr := platform.LegacyWorkingDir(dir, related...)
+	if dirErr != nil {
+		return "", dirErr
+	}
+	defer cleanup()
+	var pages []menu.Page
+	var err error
+	if !j.Settings.NoMenu {
+		if err = stage("Creating menus"); err != nil {
+			return "", err
+		}
+		pages, err = menu.Render(dir, j.Title, disc.Number, total, videos, j.Settings)
+		if err != nil {
+			return "", err
+		}
 	}
 	for _, p := range pages {
 		if err := stage(fmt.Sprintf("Creating menu page %d of %d", p.Number, len(pages))); err != nil {
@@ -99,7 +150,7 @@ func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total i
 		final := fmt.Sprintf("page-%03d.mpg", p.Number)
 		target := strings.ToLower(j.Settings.Standard) + "-dvd"
 		args := []string{"-hide_banner", "-nostdin", "-y", "-loop", "1", "-i", filepath.Base(p.Background), "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo", "-target", target, "-aspect", j.Settings.Menu.Defaults().Aspect, "-b:v", "2000k", "-b:a", "256k", "-ac", "2", "-t", "1", base}
-		if err = process.Run(ctx, t.FFmpeg, args, process.Options{Dir: dir, Log: log}); err != nil {
+		if err = process.Run(ctx, t.FFmpeg, args, process.Options{Dir: toolDir, Log: log}); err != nil {
 			return "", err
 		}
 		in, e := os.Open(filepath.Join(dir, base))
@@ -111,7 +162,7 @@ func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total i
 			in.Close()
 			return "", e
 		}
-		err = process.Run(ctx, t.Spumux, []string{"-s", "0", filepath.Base(p.XML)}, process.Options{Dir: dir, Stdin: in, Stdout: out, Log: log, Env: []string{"VIDEO_FORMAT=" + strings.ToUpper(j.Settings.Standard)}})
+		err = process.Run(ctx, t.Spumux, []string{"-s", "0", filepath.Base(p.XML)}, process.Options{Dir: toolDir, Stdin: in, Stdout: out, Log: log, Env: []string{"VIDEO_FORMAT=" + strings.ToUpper(j.Settings.Standard)}})
 		in.Close()
 		ce := out.Close()
 		if err != nil {
@@ -134,7 +185,7 @@ func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total i
 				in.Close()
 				return "", err
 			}
-			err = process.Run(ctx, t.Spumux, []string{"-s", "1", filepath.Base(p.LetterboxXML)}, process.Options{Dir: dir, Stdin: in, Stdout: out, Log: log, Env: []string{"VIDEO_FORMAT=" + strings.ToUpper(j.Settings.Standard)}})
+			err = process.Run(ctx, t.Spumux, []string{"-s", "1", filepath.Base(p.LetterboxXML)}, process.Options{Dir: toolDir, Stdin: in, Stdout: out, Log: log, Env: []string{"VIDEO_FORMAT=" + strings.ToUpper(j.Settings.Standard)}})
 			in.Close()
 			ce = out.Close()
 			if err != nil {
@@ -156,7 +207,7 @@ func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total i
 	if err := stage("Authoring DVD"); err != nil {
 		return "", err
 	}
-	if err = process.Run(ctx, t.DVDAuthor, []string{"-x", "dvd.xml"}, process.Options{Dir: dir, Log: log, Env: []string{"VIDEO_FORMAT=" + j.Settings.Standard}}); err != nil {
+	if err = process.Run(ctx, t.DVDAuthor, []string{"-x", "dvd.xml"}, process.Options{Dir: toolDir, Log: log, Env: []string{"VIDEO_FORMAT=" + j.Settings.Standard}}); err != nil {
 		return "", err
 	}
 	if err = os.MkdirAll(filepath.Join(dir, "dvd", "AUDIO_TS"), 0755); err != nil {
@@ -169,7 +220,7 @@ func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total i
 		return "", err
 	}
 	volume := fmt.Sprintf("EASYDVD_%03d", disc.Number)
-	if err = process.Run(ctx, t.Mkisofs, []string{"-dvd-video", "-udf", "-V", volume, "-o", "disc.iso", "dvd"}, process.Options{Dir: dir, Log: log}); err != nil {
+	if err = process.Run(ctx, t.Mkisofs, []string{"-dvd-video", "-udf", "-V", volume, "-o", "disc.iso", "dvd"}, process.Options{Dir: toolDir, Log: log}); err != nil {
 		return "", err
 	}
 	path := filepath.Join(dir, "disc.iso")

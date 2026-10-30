@@ -84,6 +84,9 @@ func New(st *store.Store, defaults model.Settings, t media.Tools, options ...Opt
 			j.State = model.Paused
 			j.Stage = "Interrupted — resume to continue"
 		}
+		if j.ScanComplete && !j.Locked {
+			applyAutomaticMenu(j)
+		}
 	}
 	if err = st.Save(e.jobs); err != nil {
 		cancel()
@@ -152,14 +155,74 @@ func (e *Engine) Add(folder string) error {
 		return err
 	}
 	absolute = filepath.Clean(absolute)
+	info, err := fsops.Stat(e.ctx, absolute)
+	if err != nil {
+		return err
+	}
+	if info.Exists && !info.Directory {
+		return e.AddFiles([]string{absolute})
+	}
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for _, j := range e.jobs {
-		if strings.EqualFold(j.Folder, absolute) && j.State != model.Complete && j.State != model.Canceled {
+		if len(j.Sources) == 0 && strings.EqualFold(j.Folder, absolute) && j.State != model.Complete && j.State != model.Canceled {
 			return fmt.Errorf("folder is already in the queue")
 		}
 	}
 	j := model.Job{ID: model.ID(), Folder: absolute, Title: filepath.Base(absolute), State: model.Scanning, Stage: "Discovering videos", Settings: e.settings, Created: time.Now()}
+	if e.settings.NoMenu {
+		mode := true
+		j.NoMenuOverride = &mode
+	}
+	e.jobs = append(e.jobs, j)
+	e.persistLocked()
+	e.scanLocked(j.ID)
+	return nil
+}
+
+// AddFiles records an explicit selection so rescans never pick up sibling files.
+func (e *Engine) AddFiles(paths []string) error {
+	if len(paths) == 0 {
+		return fmt.Errorf("select at least one video file")
+	}
+	var sources []string
+	seen := map[string]bool{}
+	for _, path := range paths {
+		absolute, err := filepath.Abs(path)
+		if err != nil {
+			return err
+		}
+		absolute = filepath.Clean(absolute)
+		if !media.IsVideo(absolute) {
+			return fmt.Errorf("unsupported video file: %s", path)
+		}
+		key := strings.ToLower(absolute)
+		if !seen[key] {
+			sources = append(sources, absolute)
+			seen[key] = true
+		}
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	for _, j := range e.jobs {
+		if j.State == model.Complete || j.State == model.Canceled {
+			continue
+		}
+		for _, path := range j.Sources {
+			if seen[strings.ToLower(path)] {
+				return fmt.Errorf("file is already in the queue: %s", path)
+			}
+		}
+	}
+	title := strings.TrimSuffix(filepath.Base(sources[0]), filepath.Ext(sources[0]))
+	if len(sources) > 1 {
+		title = filepath.Base(filepath.Dir(sources[0]))
+	}
+	j := model.Job{ID: model.ID(), Folder: filepath.Dir(sources[0]), Sources: sources, Title: title, State: model.Scanning, Stage: "Inspecting selected videos", Settings: e.settings, Created: time.Now()}
+	if e.settings.NoMenu {
+		mode := true
+		j.NoMenuOverride = &mode
+	}
 	e.jobs = append(e.jobs, j)
 	e.persistLocked()
 	e.scanLocked(j.ID)
@@ -170,6 +233,15 @@ func (e *Engine) scanLocked(id string) {
 	if _, ok := e.scans[id]; ok {
 		return
 	}
+	// Publish the pending scan before waking the queue loop. Otherwise a
+	// resumed scan can look idle and cause Start to disable processing.
+	i := e.index(id)
+	if i < 0 {
+		return
+	}
+	e.jobs[i].State = model.Scanning
+	e.jobs[i].ScanComplete = false
+	e.jobs[i].Stage = "Discovering videos"
 	ctx, cancel := context.WithCancel(e.ctx)
 	e.scans[id] = cancel
 	e.wg.Add(1)
@@ -212,7 +284,11 @@ func (e *Engine) scanLocked(id string) {
 					case <-ctx.Done():
 						return
 					}
-					v, err := e.tools.Probe(ctx, filepath.Join(job.Folder, relative), relative)
+					path := relative
+					if !filepath.IsAbs(path) {
+						path = filepath.Join(job.Folder, relative)
+					}
+					v, err := e.tools.Probe(ctx, path, relative)
 					<-e.probeSlots
 					if ctx.Err() != nil {
 						return
@@ -224,6 +300,8 @@ func (e *Engine) scanLocked(id string) {
 						v.Label = previous.Label
 						v.Excluded = previous.Excluded
 						if previous.Fingerprint() == v.Fingerprint() {
+							v.CropLeft, v.CropRight, v.CropChecked = previous.CropLeft, previous.CropRight, previous.CropChecked
+							v.CropVersion = previous.CropVersion
 							v.Encoded = previous.Encoded
 							v.EncodedSize = previous.EncodedSize
 							v.EncodedHash = previous.EncodedHash
@@ -247,7 +325,7 @@ func (e *Engine) scanLocked(id string) {
 				}
 			}()
 		}
-		err := media.Discover(ctx, job.Folder, []string{job.Settings.WorkDir, job.Settings.OutputDir}, func(path string) {
+		found := func(path string) {
 			e.mu.Lock()
 			if i := e.index(id); i >= 0 {
 				e.jobs[i].Discovered++
@@ -258,7 +336,19 @@ func (e *Engine) scanLocked(id string) {
 			case paths <- path:
 			case <-ctx.Done():
 			}
-		})
+		}
+		var err error
+		if len(job.Sources) > 0 {
+			for _, path := range job.Sources {
+				relative, relErr := filepath.Rel(job.Folder, path)
+				if relErr != nil {
+					relative = path
+				}
+				found(relative)
+			}
+		} else {
+			err = media.Discover(ctx, job.Folder, []string{job.Settings.WorkDir, job.Settings.OutputDir}, found)
+		}
 		close(paths)
 		workers.Wait()
 		e.mu.Lock()
@@ -282,6 +372,7 @@ func (e *Engine) scanLocked(id string) {
 		j.State = model.Ready
 		j.Stage = "Ready"
 		j.Progress = 0
+		applyAutomaticMenu(j)
 		if err != nil {
 			j.State = model.Blocked
 			j.Error = err.Error()
@@ -307,7 +398,7 @@ func (e *Engine) estimateLocked(j *model.Job) {
 	var items []packing.Item
 	for i, v := range j.Videos {
 		if !v.Excluded && v.Error == "" {
-			items = append(items, packing.Item{ID: v.ID, Bytes: v.EstimatedBytes(), Order: i})
+			items = append(items, packing.Item{ID: v.ID, Bytes: v.EstimatedBytes(j.Settings), Order: i})
 		}
 	}
 	r, err := packing.Plan(context.Background(), items, j.Settings.Capacity(), j.Settings.Packing == "Space efficiency", 0)
@@ -430,17 +521,45 @@ func (e *Engine) Remove(id string) error {
 // them. Source files, saved encodes and published output are left intact. Jobs
 // added while cancellation is underway are not part of this clear operation.
 func (e *Engine) ClearQueue() error {
+	return e.removeJobs(nil, true)
+}
+
+// RemoveJobs stops and removes exactly the selected jobs, keeping their files.
+func (e *Engine) RemoveJobs(ids []string) error {
+	return e.removeJobs(ids, false)
+}
+
+func (e *Engine) removeJobs(jobIDs []string, all bool) error {
 	e.mu.Lock()
 	if e.clearing {
 		e.mu.Unlock()
 		return nil
 	}
+	ids := make(map[string]bool, len(e.jobs))
+	for _, id := range jobIDs {
+		if e.index(id) < 0 {
+			e.mu.Unlock()
+			return fmt.Errorf("selected job no longer exists")
+		}
+		ids[id] = true
+	}
+	if all {
+		for _, j := range e.jobs {
+			ids[j.ID] = true
+		}
+	}
+	if len(ids) == 0 {
+		e.mu.Unlock()
+		return nil
+	}
+	resume := e.enabled && !all
 	e.clearing = true
 	e.enabled = false
-	ids := make(map[string]bool, len(e.jobs))
 	for k := range e.jobs {
 		j := &e.jobs[k]
-		ids[j.ID] = true
+		if !ids[j.ID] {
+			continue
+		}
 		if cancel := e.cancels[j.ID]; cancel != nil {
 			cancel()
 		}
@@ -449,7 +568,7 @@ func (e *Engine) ClearQueue() error {
 		}
 		if j.State != model.Complete {
 			j.State = model.Canceled
-			j.Stage = "Stopping — clearing queue"
+			j.Stage = "Stopping — removing from queue"
 		}
 	}
 	e.persistLocked()
@@ -457,6 +576,9 @@ func (e *Engine) ClearQueue() error {
 	defer func() {
 		e.mu.Lock()
 		e.clearing = false
+		if resume && e.ctx.Err() == nil && e.lastError == "" {
+			e.enabled = true
+		}
 		e.signal()
 		e.mu.Unlock()
 	}()
@@ -525,6 +647,9 @@ func (e *Engine) Edit(id, title, videoID, label string, excluded *bool) error {
 			}
 		}
 	}
+	if excluded != nil {
+		e.refreshReadinessLocked(j)
+	}
 	e.estimateLocked(j)
 	e.persistLocked()
 	return nil
@@ -563,12 +688,52 @@ func (e *Engine) SetExcluded(id string, videoIDs []string, excluded bool) error 
 			j.Videos[k].Excluded = excluded
 		}
 	}
+	e.refreshReadinessLocked(j)
 	e.estimateLocked(j)
 	e.persistLocked()
 	return nil
 }
 
+// The first inspected collection, and later inclusion changes, choose a useful
+// default. A manual menu/no-menu choice takes precedence and survives rescans.
+func applyAutomaticMenu(j *model.Job) {
+	if j.NoMenuOverride != nil {
+		j.Settings.NoMenu = *j.NoMenuOverride
+		return
+	}
+	j.Settings.NoMenu = len(j.ActiveVideos()) == 1
+}
+
+func (e *Engine) refreshReadinessLocked(j *model.Job) {
+	if !j.ScanComplete || (j.State != model.Ready && j.State != model.Blocked) {
+		return
+	}
+	active := j.ActiveVideos()
+	applyAutomaticMenu(j)
+	if len(active) == 0 {
+		j.State, j.Error = model.Blocked, "No included video files"
+		return
+	}
+	for _, v := range active {
+		if v.Error != "" {
+			j.State, j.Error = model.Blocked, "One or more videos need attention; retry or exclude them"
+			return
+		}
+	}
+	j.State, j.Stage, j.Error = model.Ready, "Ready", ""
+}
+
 func (e *Engine) SetSettings(id string, s model.Settings) error {
+	return e.setSettings(id, s, false)
+}
+
+// SetJobSettings records a deliberate playback-mode choice, even if it matches
+// the current automatic default for the job's number of included videos.
+func (e *Engine) SetJobSettings(id string, s model.Settings) error {
+	return e.setSettings(id, s, true)
+}
+
+func (e *Engine) setSettings(id string, s model.Settings, explicitPlayback bool) error {
 	if err := s.Validate(); err != nil {
 		return err
 	}
@@ -579,12 +744,6 @@ func (e *Engine) SetSettings(id string, s model.Settings) error {
 			return err
 		}
 		e.settings = s
-		for i := range e.jobs {
-			if !e.jobs[i].Locked && e.jobs[i].State != model.Complete {
-				e.jobs[i].Settings = s
-				e.estimateLocked(&e.jobs[i])
-			}
-		}
 	} else {
 		i := e.index(id)
 		if i < 0 {
@@ -593,7 +752,12 @@ func (e *Engine) SetSettings(id string, s model.Settings) error {
 		if e.jobs[i].Locked {
 			return fmt.Errorf("settings were locked when this job started; add the folder again for different encoding settings")
 		}
+		if explicitPlayback || e.jobs[i].Settings.NoMenu != s.NoMenu {
+			mode := s.NoMenu
+			e.jobs[i].NoMenuOverride = &mode
+		}
 		e.jobs[i].Settings = s
+		e.refreshReadinessLocked(&e.jobs[i])
 		e.estimateLocked(&e.jobs[i])
 	}
 	e.persistLocked()
@@ -772,7 +936,7 @@ func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) err
 	var remaining, stage int64
 	for _, v := range videos {
 		if v.Encoded == "" {
-			remaining += v.EstimatedBytes()
+			remaining += v.EstimatedBytes(s)
 		}
 		if v.Size > stage {
 			stage = v.Size
@@ -1059,6 +1223,16 @@ func (e *Engine) encode(ctx context.Context, j model.Job, videos []model.Video, 
 					fail(v, err)
 					release()
 					continue
+				}
+				if v.Encoded == "" && (!v.CropChecked || v.CropVersion != media.PillarboxVersion) {
+					e.update(j.ID, false, func(job *model.Job) { job.Stage = "Checking black borders · " + v.Label })
+					var err error
+					v, err = e.tools.DetectPillarbox(ctx, v, task.input, log)
+					if err != nil {
+						fail(v, err)
+						release()
+						continue
+					}
 				}
 				v.Thumbnail = filepath.Join(dir, "thumbnail.jpg")
 				if _, err := os.Stat(v.Thumbnail); err != nil {

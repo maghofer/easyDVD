@@ -88,6 +88,9 @@ a compatible external installation or offers an explicit private download.
 No system-wide installation or PATH change is required. Packaging refuses to
 overwrite existing output directories. Close the app before rebuilding its exe.
 
+FFmpeg is the sole video encoder and remains external in the normal package.
+See [encoding quality](ENCODERS.md) for the production profile and benchmark.
+
 The authoring toolchain is built once into a reusable local/CI cache. A valid
 cache is verified and reused on subsequent app builds and pushes. To rebuild the
 helpers explicitly, run `scripts/build-authoring.ps1` with an isolated scratch
@@ -116,7 +119,7 @@ three DVD helper executables; their non-system libraries are linked into them.
   but is not a substitute for a clean VM.
 - Test burned DVD-5 and DVD-9 media in representative standalone players,
   including menu return, Play All and aspect-ratio switching.
-- Review actual film-scan output and complete the optional encoder comparison.
+- Review actual film-scan output using the production profile and benchmark.
 - Record the results, known limitations, tag, source archive, build information
   and published ZIP hashes. Code signing is optional for a preview and is not
   configured by this project.

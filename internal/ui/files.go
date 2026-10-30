@@ -22,41 +22,45 @@ func filesEditable(j *model.Job) bool {
 	return j != nil && j.State != model.Running && j.State != model.Scanning && j.State != model.Complete
 }
 
+type fileList struct {
+	widget.List
+	u *window
+}
+
+func (l *fileList) TypedShortcut(shortcut fyne.Shortcut) {
+	if _, ok := shortcut.(*fyne.ShortcutSelectAll); ok {
+		l.u.selectAllFiles()
+	}
+}
+
 func (u *window) buildFileList() fyne.CanvasObject {
 	u.selectedFiles = make(map[string]bool)
-	u.files = widget.NewList(func() int {
+	u.files = &fileList{u: u}
+	u.files.Length = func() int {
 		if j := u.selectedJob(); j != nil {
 			return len(j.Videos)
 		}
 		return 0
-	}, func() fyne.CanvasObject {
+	}
+	u.files.CreateItem = func() fyne.CanvasObject {
 		return newFileRow(u)
-	}, func(i widget.ListItemID, object fyne.CanvasObject) {
+	}
+	u.files.UpdateItem = func(i widget.ListItemID, object fyne.CanvasObject) {
 		if j := u.selectedJob(); j != nil && i < len(j.Videos) {
 			object.(*fileRow).update(j, i)
 		}
-	})
+	}
+	u.files.ExtendBaseWidget(u.files)
 	u.files.HideSeparators = true
-	// Checkboxes hold the multi-selection; retain keyboard selection through the list.
+	// Custom rows share Explorer selection while retaining the list's keyboard focus.
 	u.files.OnSelected = func(i widget.ListItemID) {
 		if j := u.selectedJob(); j != nil && i < len(j.Videos) {
-			u.setFileSelected(j.Videos[i].ID, !u.selectedFiles[j.Videos[i].ID])
+			u.selectFile(j.Videos[i].ID)
 			u.files.Unselect(i)
 		}
 	}
-	u.selectAll = widget.NewCheck("Select all", func(checked bool) {
-		if j := u.selectedJob(); j != nil {
-			for _, v := range j.Videos {
-				if checked {
-					u.selectedFiles[v.ID] = true
-				} else {
-					delete(u.selectedFiles, v.ID)
-				}
-			}
-		}
-		u.refreshFileSelection()
-		u.files.Refresh()
-	})
+	u.selectAll = widget.NewButton("Select all", u.selectAllFiles)
+	u.selectAll.Importance = widget.LowImportance
 	u.selectionCount = widget.NewLabel("0 selected")
 	u.excludeSelected = widget.NewButtonWithIcon("Exclude selected", theme.VisibilityOffIcon(), func() { u.setSelectedExcluded(true) })
 	u.includeSelected = widget.NewButtonWithIcon("Include selected", theme.VisibilityIcon(), func() { u.setSelectedExcluded(false) })
@@ -64,16 +68,35 @@ func (u *window) buildFileList() fyne.CanvasObject {
 	return container.NewBorder(bar, nil, nil, nil, u.files)
 }
 
-func (u *window) setFileSelected(id string, selected bool) {
-	if selected {
-		u.selectedFiles[id] = true
-	} else {
-		delete(u.selectedFiles, id)
+func (u *window) selectAllFiles() {
+	if j := u.selectedJob(); j != nil {
+		for _, v := range j.Videos {
+			u.selectedFiles[v.ID] = true
+		}
 	}
+	u.win.Canvas().Focus(u.files)
 	u.refreshFileSelection()
 	u.files.Refresh()
 }
 
+func (u *window) selectFile(id string) { u.selectFiles(id, selectionModifiers(u.app)) }
+
+func (u *window) selectFiles(id string, modifiers fyne.KeyModifier) {
+	j := u.selectedJob()
+	if j == nil {
+		return
+	}
+	ids := make([]string, len(j.Videos))
+	for i, v := range j.Videos {
+		ids[i] = v.ID
+	}
+	if !selectItems(ids, u.selectedFiles, &u.selectionAnchor, id, modifiers) {
+		return
+	}
+	u.win.Canvas().Focus(u.files)
+	u.refreshFileSelection()
+	u.files.Refresh()
+}
 func (u *window) refreshFileSelection() {
 	j := u.selectedJob()
 	jobID := ""
@@ -82,6 +105,7 @@ func (u *window) refreshFileSelection() {
 	}
 	if u.selectionJob != jobID {
 		u.selectionJob = jobID
+		u.selectionAnchor = ""
 		clear(u.selectedFiles)
 		u.files.UnselectAll()
 		u.files.ScrollToTop()
@@ -108,10 +132,6 @@ func (u *window) refreshFileSelection() {
 		}
 	}
 	u.selectionCount.SetText(fmt.Sprintf("%d selected", count))
-	change := u.selectAll.OnChanged
-	u.selectAll.OnChanged = nil
-	u.selectAll.SetChecked(total > 0 && count == total)
-	u.selectAll.OnChanged = change
 	enabled(u.selectAll, total > 0)
 	enabled(u.excludeSelected, filesEditable(j) && !u.snapshot.Clearing && included > 0)
 	enabled(u.includeSelected, filesEditable(j) && !u.snapshot.Clearing && excluded > 0)
@@ -172,7 +192,6 @@ type fileRow struct {
 	index                         int
 	selected                      bool
 	background                    *canvas.Rectangle
-	selectFile                    *widget.Check
 	title, state, duration        *widget.Label
 	warning, edit, revert, toggle *fileAction
 	content                       fyne.CanvasObject
@@ -181,7 +200,6 @@ type fileRow struct {
 func newFileRow(u *window) *fileRow {
 	r := &fileRow{u: u, background: canvas.NewRectangle(color.Transparent)}
 	r.ExtendBaseWidget(r)
-	r.selectFile = widget.NewCheck("", nil)
 	r.title = widget.NewLabel("Video title")
 	r.title.Truncation = fyne.TextTruncateEllipsis
 	r.state = widget.NewLabel("")
@@ -193,7 +211,7 @@ func newFileRow(u *window) *fileRow {
 	// Keep a fixed warning slot so actions stay aligned across healthy and failed rows.
 	warningSlot := container.NewGridWrap(r.warning.MinSize(), r.warning)
 	actions := container.NewHBox(r.state, r.duration, warningSlot, r.edit, r.revert, r.toggle)
-	r.content = container.NewStack(r.background, container.NewBorder(nil, nil, r.selectFile, actions, r.title))
+	r.content = container.NewStack(r.background, container.NewBorder(nil, nil, nil, actions, r.title))
 	return r
 }
 
@@ -202,7 +220,7 @@ func (r *fileRow) CreateRenderer() fyne.WidgetRenderer {
 }
 
 func (r *fileRow) Tapped(*fyne.PointEvent) {
-	r.u.setFileSelected(r.id, !r.u.selectedFiles[r.id])
+	r.u.selectFile(r.id)
 }
 
 func (r *fileRow) update(j *model.Job, index int) {
@@ -213,9 +231,6 @@ func (r *fileRow) update(j *model.Job, index int) {
 		}
 	}
 	r.id, r.index, r.selected = v.ID, index, r.u.selectedFiles[v.ID]
-	r.selectFile.OnChanged = nil
-	r.selectFile.SetChecked(r.selected)
-	r.selectFile.OnChanged = func(checked bool) { r.u.setFileSelected(v.ID, checked) }
 	r.title.SetText(v.Label)
 	edited := v.Label != v.OriginalLabel()
 	r.title.TextStyle = fyne.TextStyle{Italic: edited, Strikethrough: v.Excluded}
