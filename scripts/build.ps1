@@ -1,14 +1,39 @@
 param([switch]$Test, [switch]$Integration, [switch]$IncludeFFmpeg, [switch]$AppOnly, [string]$Version, [string]$OutputDir)
 . (Join-Path $PSScriptRoot 'common.ps1')
+. (Join-Path $PSScriptRoot 'quality-runtime/common.ps1')
 $Version = Get-AppVersion $Version
 if (-not $OutputDir) { $OutputDir = Join-Path $ProjectRoot 'bin' }
 $OutputDir = [IO.Path]::GetFullPath($OutputDir)
 $resourceScratch = Join-Path ([IO.Path]::GetTempPath()) ('easyDVD-build-' + [guid]::NewGuid().ToString('N'))
 Use-DevTools
+if (-not $AppOnly) { & (Join-Path $PSScriptRoot 'prepare-quality-runtime.ps1') }
 Push-Location $ProjectRoot
 try {
     if ($Test) { & go test ./...; Assert-Exit 'Unit tests' }
-    if ($Integration) { $env:EASYDVD_TOOLS=Join-Path $ToolsRoot 'media/bin'; $env:EASYDVD_INTEGRATION='1'; & go test -count=1 -v ./internal/integration; Assert-Exit 'Integration tests'; Remove-Item Env:EASYDVD_INTEGRATION }
+    if ($Integration) {
+        $oldTools, $oldQuality, $oldIntegration, $oldLocal = $env:EASYDVD_TOOLS, $env:EASYDVD_HCENC, $env:EASYDVD_INTEGRATION, $env:LOCALAPPDATA
+        try {
+            $env:EASYDVD_TOOLS=Join-Path $ToolsRoot 'media/bin'
+            $privateRuntime = Join-Path $resourceScratch 'integration-runtime'
+            New-Item -ItemType Directory -Force $privateRuntime | Out-Null
+            foreach ($entry in $QualityLock.binaries) { Copy-Item -LiteralPath (Join-Path (Get-QualityCacheRoot) "bin/$($entry.name)") -Destination $privateRuntime }
+            $encoder = $null
+            if ($oldQuality -and (Test-Path -LiteralPath (Join-Path $oldQuality 'HCenc.exe'))) {
+                $encoder = Get-Item -LiteralPath (Join-Path $oldQuality 'HCenc.exe')
+            } else {
+                $env:LOCALAPPDATA=Join-Path $resourceScratch 'profile/local'
+                & go run ./cmd/easydvd-cli -download-hcenc -state (Join-Path $resourceScratch 'integration-queue.db')
+                Assert-Exit 'Prepare isolated HCEnc test dependency'
+                $encoder = Get-ChildItem -LiteralPath (Join-Path $env:LOCALAPPDATA 'easyDVD/hcenc') -Recurse -Filter HCenc.exe | Select-Object -First 1
+            }
+            if (-not $encoder) { throw 'HCEnc test dependency was not installed.' }
+            Copy-Item -LiteralPath $encoder.FullName -Destination (Join-Path $privateRuntime 'HCenc.exe')
+            $env:EASYDVD_HCENC=$privateRuntime
+            $env:EASYDVD_INTEGRATION='1'
+            & go test -count=1 -v ./internal/integration
+            Assert-Exit 'Integration tests'
+        } finally { $env:EASYDVD_TOOLS=$oldTools; $env:EASYDVD_HCENC=$oldQuality; $env:EASYDVD_INTEGRATION=$oldIntegration; $env:LOCALAPPDATA=$oldLocal }
+    }
     New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
     $resource = & (Join-Path $PSScriptRoot 'windows-resource.ps1') -Version $Version -Scratch $resourceScratch
     # Stage source so generated Windows resources stay in the temporary build directory.
@@ -41,4 +66,5 @@ try {
             }
         }
     }
+    if (-not $AppOnly) { Copy-QualityRuntime $OutputDir }
 } finally { Pop-Location }

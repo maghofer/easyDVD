@@ -72,9 +72,10 @@ func CLI(args []string) error {
 	authoringOnly := fs.Bool("check-authoring-tools", false, "Check bundled authoring tools without requiring FFmpeg")
 	ffmpegDir := fs.String("ffmpeg-dir", "", "Use FFmpeg and FFprobe from this folder for this run")
 	downloadFFmpeg := fs.Bool("download-ffmpeg", false, "Download and remember the recommended private FFmpeg installation")
+	downloadHCenc := fs.Bool("download-hcenc", false, "Download the pinned HCEnc encoder from its upstream supplier into easyDVD's private cache")
 	resume := fs.Bool("resume", false, "Resume saved queue")
 	workers := fs.Int("encoders", 2, "Parallel encoders (1–2)")
-	profile := fs.String("profile", model.ProfileBalanced, "Encoding profile: Balanced or Quality")
+	profile := fs.String("profile", model.ProfileBalanced, "Encoding profile: Balanced (ffmpeg) or Quality (hcenc); use Balanced or Quality as the value")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -83,6 +84,19 @@ func CLI(args []string) error {
 		return nil
 	}
 	t := media.FindAuthoringTools()
+	if *downloadHCenc {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+		defer stop()
+		path, err := media.InstallRecommendedHCenc(ctx, func(p media.DownloadProgress) { fmt.Fprintln(os.Stderr, p.Stage) })
+		if err != nil {
+			return err
+		}
+		t.HCenc = path
+		if fs.NArg() == 0 && !*resume && !*tools && !*downloadFFmpeg {
+			fmt.Println("HCEnc is ready: " + path)
+			return nil
+		}
+	}
 	if *authoringOnly {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
@@ -129,7 +143,7 @@ func CLI(args []string) error {
 		if err := t.Require(); err != nil {
 			return err
 		}
-		return nil
+		return t.RequireProfile(model.Settings{EncodingProfile: *profile})
 	}
 	if *downloadFFmpeg && fs.NArg() == 0 && !*resume {
 		return t.Require()

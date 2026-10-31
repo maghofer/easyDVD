@@ -18,8 +18,8 @@ account information is embedded in the application.
 ## Version numbers and updates
 
 `VERSION` is the source of the default application/package version. Keep it in
-SemVer form without a `v` prefix: `0.1.0-preview.8`, then `0.1.0` for the first
-stable release. Bump it when preparing a new release, not on every push. Existing
+SemVer form without a `v` prefix: `0.1.0-rc.1` for the release candidate, then
+`0.1.0` for the first stable release. Bump it when preparing a new release, not on every push. Existing
 preview packages through preview.6 predate the embedded version system.
 Use `0.1.1` for fixes, `0.2.0` for the next feature release during initial development.
 
@@ -73,6 +73,11 @@ GitHub references: [manual workflows](https://docs.github.com/en/actions/how-tos
 
 ## Local preview package
 
+For a Windows setup executable alongside the ZIPs, install Inno Setup and pass
+`-Installer` (and `-ISCCPath` if needed) to `package.ps1`. The setup uses the same
+runtime payload and retains the existing public-distribution gates. See
+[Windows installer](INSTALLER.md) for building and isolated installation tests.
+
 ```powershell
 ./scripts/bootstrap.ps1
 ./scripts/build.ps1 -Test -Integration
@@ -88,7 +93,22 @@ a compatible external installation or offers an explicit private download.
 No system-wide installation or PATH change is required. Packaging refuses to
 overwrite existing output directories. Close the app before rebuilding its exe.
 
-FFmpeg is the sole video encoder and remains external in the normal package.
+Balanced uses external FFmpeg. Quality includes source-built 32-bit AviSynth+
+and FFMS2; the latter statically contains a minimal LGPL FFmpeg and zlib.
+`prepare-quality-runtime.ps1` builds or verifies this cache. Building it needs
+MSVC C++ build tools/Windows SDK as well as Git for Windows and CMake/Ninja.
+The source companion includes all matching source archives, notices and recipes.
+Both Windows workflows cache the verified support libraries and authoring tools.
+
+HCEnc's general redistribution grant was not established, so its executable and
+supplier binary archives are excluded from public runtime/source packages.
+First-launch setup obtains the pinned encoder directly from its author when
+missing. Settings provides **Repair dependencies** for manual recovery; the CLI
+also supports `-download-hcenc`.
+The new support-library source review is complete; the prior supplier binaries
+were replaced or excluded, not declared cleared. `-PublicRelease` verifies the
+bundled DLL/source mappings and keeps the offline full-FFmpeg gate unchanged.
+See [the runtime record](../scripts/quality-runtime/README.md).
 See [encoding quality](ENCODERS.md) for the production profile and benchmark.
 
 The authoring toolchain is built once into a reusable local/CI cache. A valid

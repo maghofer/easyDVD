@@ -3,12 +3,19 @@ package main
 import (
 	"easydvd"
 	"easydvd/internal/app"
+	"easydvd/internal/platform"
 	"easydvd/internal/ui"
 	"fmt"
 	"os"
 )
 
 func main() {
+	release, err := platform.HoldInstallerMutex()
+	if err != nil {
+		ui.ShowStartupError(err)
+		return
+	}
+	defer release()
 	if len(os.Args) == 2 && (os.Args[1] == "--version" || os.Args[1] == "-version") {
 		fmt.Println("easyDVD " + easydvd.Version())
 		return

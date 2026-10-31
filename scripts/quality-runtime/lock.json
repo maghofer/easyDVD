@@ -1,0 +1,14 @@
+{
+  "id":"win32-source-2026.10.2",
+  "distributionReview":"complete",
+  "reviewNote":"Bundled AviSynth+ and FFMS2 are source-built. HCEnc is an optional end-user download, excluded from runtime and source packages.",
+  "binaries":[{"name":"avisynth.dll"},{"name":"ffms2.dll"}],
+  "make":{"archive":"make-4.4.1-3-x86_64.pkg.tar.zst","url":"https://repo.msys2.org/msys/x86_64/make-4.4.1-3-x86_64.pkg.tar.zst","sha256":"af0bdba17f06fe037f0194069adaa31a8fe45f1a11381501896aea1fae37bd5d"},
+  "archives":[
+    {"archive":"AviSynthPlus-3.7.6.tar.gz","url":"https://codeload.github.com/AviSynth/AviSynthPlus/tar.gz/refs/tags/v3.7.6","sha256":"8c019a934189688e73fe1cd85e6768cc0bc120fe1f4a3310c889060283c9e083"},
+    {"archive":"ffms2-5.0.tar.gz","url":"https://codeload.github.com/FFMS/ffms2/tar.gz/refs/tags/5.0","sha256":"7770af0bbc0063f9580a6a5c8e7c51f1788f171d7da0b352e48a1e60943a8c3c"},
+    {"archive":"ffmpeg-6.1.3.tar.xz","url":"https://ffmpeg.org/releases/ffmpeg-6.1.3.tar.xz","sha256":"bc5f1e4a4d283a6492354684ee1124129c52293bcfc6a9169193539fbece3487"},
+    {"archive":"zlib-1.3.2.tar.xz","url":"https://zlib.net/zlib-1.3.2.tar.xz","sha256":"d7a0654783a4da529d1bb793b7ad9c3318020af77667bcae35f95d0e42a792f3"}
+  ],
+  "notices":[{"name":"AviSynth-GPL-2.0.txt"},{"name":"AviSynth-license.rst"},{"name":"FFMS2-MIT.txt"},{"name":"FFmpeg-LGPL-2.1.txt"},{"name":"zlib-LICENSE.txt"}]
+}

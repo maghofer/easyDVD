@@ -6,10 +6,11 @@ easyDVD is a Windows app for turning folders of video files into DVD-Video ISO
 files with menus. Add your folders, choose your disc and menu settings, and let
 the queue process them into DVD sets.
 
-**[Download for Windows (64-bit)](https://github.com/maghofer/easyDVD/releases)**
+**[Download for Windows (64-bit)](https://github.com/maghofer/easyDVD/releases/latest)**
 
-The current release is a preview. Choose the `easyDVD-…-win64.zip` download;
-the separate sources ZIP is not needed to run the app.
+The first stable release is **0.1.0**. Choose `easyDVD-…-win64-setup.exe`
+for normal installation, or `easyDVD-…-win64.zip` for portable use. The separate
+sources ZIP is not needed to run the app.
 
 ## What it does
 
@@ -44,8 +45,13 @@ using easyDVD.
 
 ## Getting started
 
-1. Extract the complete Windows ZIP and open **easyDVD.exe**. Keep the `tools`
-   folder beside it.
+Run `easyDVD-…-win64-setup.exe` for a normal Windows
+installation with shortcuts and an uninstaller. Later installers upgrade the
+same location and keep your settings and queue. The ZIP remains available for
+portable use; follow the extraction steps below for that version.
+
+1. Install easyDVD and open its shortcut, or extract the complete Windows ZIP
+   and open **easyDVD.exe**. For portable use, keep the `tools` folder beside it.
 2. Drag folders into the window or use **Add folders**. Review the videos and
    choose an output folder and a local work folder with enough free space. You can
    also drop video files. Hold Shift while selecting files to select a range.
@@ -63,10 +69,13 @@ range. Files use the same selection behavior. Use **Remove selected** or **Delet
 The X on a tile removes that job. Removing active jobs asks to stop them first;
 source and output files are kept. Overall progress appears in the bottom bar.
 
-FFmpeg performs two-pass MPEG-2 encoding. **Balanced** is the default, targeting
+**Balanced** uses FFmpeg two-pass MPEG-2 and remains the default, targeting
 7.5 Mbps video with 256 kbps AC-3 audio for speed and smaller files. Choose
-**Quality** in Job settings for 9 Mbps video, 448 kbps audio and more detailed
-analysis. easyDVD adds discs instead of reducing the chosen profile's bitrate to
+**Quality** in Job settings for HCEnc BEST two-pass VBR using AVStoDVD's settings:
+8.5 Mbps video target, 9 Mbps peak and 448 kbps audio. AviSynth+ and FFMS2 are
+included; first-launch setup downloads and verifies HCEnc once into a private
+cache. AVStoDVD and a separate AviSynth installation are not needed.
+easyDVD adds discs instead of reducing the chosen profile's bitrate to
 squeeze more footage onto one disc. FFmpeg remains an external dependency;
 first run can locate it or download a private copy. See [Encoding quality](docs/ENCODERS.md).
 Single-video jobs default to automatic playback without a menu; multi-video

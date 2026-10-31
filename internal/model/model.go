@@ -28,6 +28,18 @@ const (
 	ProfileQuality  = "Quality"
 )
 
+// ProfileLabel names the encoder without changing saved profile identifiers.
+func ProfileLabel(profile string) string {
+	switch profile {
+	case ProfileBalanced:
+		return "Balanced (ffmpeg)"
+	case ProfileQuality:
+		return "Quality (hcenc)"
+	default:
+		return profile
+	}
+}
+
 type Settings struct {
 	Standard        string    `json:"standard"`
 	Media           string    `json:"media"`
@@ -67,7 +79,7 @@ func (s *Settings) UnmarshalJSON(data []byte) error {
 
 func (s Settings) Validate() error {
 	if s.Profile() != ProfileBalanced && s.Profile() != ProfileQuality {
-		return fmt.Errorf("choose Balanced or Quality encoding")
+		return fmt.Errorf("choose %s or %s encoding", ProfileLabel(ProfileBalanced), ProfileLabel(ProfileQuality))
 	}
 	if s.Standard != "PAL" && s.Standard != "NTSC" {
 		return fmt.Errorf("choose PAL or NTSC")
@@ -131,13 +143,13 @@ func (s Settings) EncodingKey() string {
 	if s.Profile() == ProfileBalanced {
 		return Hash("mpeg2-v2-balanced-7500-9000-rd-q2-ac3-256-2pass-" + s.Standard)
 	}
-	return Hash("mpeg2-v5-quality-ceiling-ac3-448-2pass-" + s.Standard)
+	return Hash("hcenc-v1-best-8500-9000-bias80-dc10-mpeg-aq1-lum1-ac3-448-2pass-" + s.Standard)
 }
 
 func (s Settings) Profile() string {
 	// Saved jobs without a profile used Quality. Preferences decode over the
 	// current defaults instead, so new jobs adopt Balanced while old jobs keep
-	// their effective profile and reusable checkpoints.
+	// their effective profile.
 	if s.EncodingProfile == "" {
 		return ProfileQuality
 	}
@@ -148,7 +160,7 @@ func (s Settings) VideoBitrate() int {
 	if s.Profile() == ProfileBalanced {
 		return 7500000
 	}
-	return 9000000
+	return 8500000
 }
 
 func (s Settings) AudioBitrate() int {

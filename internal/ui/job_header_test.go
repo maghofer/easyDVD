@@ -83,13 +83,13 @@ func TestJobHeaderHasFixedCompactInformation(t *testing.T) {
 	}
 }
 
-func TestToolsUsesOnlyExclamationSymbol(t *testing.T) {
+func TestToolsUsesCircledExclamationIcon(t *testing.T) {
 	u := fileListFixture(t)
 	var symbol bool
 	walkFileTestObjects(u.win.Content(), func(object fyne.CanvasObject) {
 		if b, ok := object.(*fileAction); ok && b.hint == "Media tools" {
-			if b.Text != "!" || b.Icon != nil {
-				t.Fatal("tools control is not symbol-only")
+			if b.Text != "" || b.Icon != mediaToolsIcon {
+				t.Fatal("tools control does not use the circled exclamation icon")
 			}
 			symbol = true
 		}

@@ -49,8 +49,8 @@ func TestProfilesPersistAndRetainLegacyQuality(t *testing.T) {
 	balancedEstimate := (Video{Duration: 3600}).EstimatedBytes(s)
 	s.EncodingProfile = ProfileQuality
 	qualityKey := s.EncodingKey()
-	if qualityKey == balancedKey || qualityKey != Hash("mpeg2-v5-quality-ceiling-ac3-448-2pass-PAL") {
-		t.Fatal("quality checkpoint identity changed", qualityKey)
+	if balancedKey != Hash("mpeg2-v2-balanced-7500-9000-rd-q2-ac3-256-2pass-PAL") || qualityKey == balancedKey || qualityKey == Hash("mpeg2-v5-quality-ceiling-ac3-448-2pass-PAL") {
+		t.Fatal("Balanced identity changed or old FFmpeg Quality identity was retained", qualityKey)
 	}
 	if (Video{Duration: 3600}).EstimatedBytes(s) <= balancedEstimate {
 		t.Fatal("profile ignored in space estimate")

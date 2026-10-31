@@ -75,10 +75,10 @@ func TestDefaultSettingsAndJobOverrideScope(t *testing.T) {
 	}
 	fields["Disc capacity"].(*widget.Select).SetSelected("DVD-9")
 	profile, ok := fields["Encoding profile"].(*widget.RadioGroup)
-	if !ok || profile.Selected != model.ProfileBalanced {
+	if !ok || profile.Selected != model.ProfileLabel(model.ProfileBalanced) {
 		t.Fatal("job settings have no encoding radio buttons")
 	}
-	profile.SetSelected(model.ProfileQuality)
+	profile.SetSelected(model.ProfileLabel(model.ProfileQuality))
 	jobMenu := original.Menu
 	jobMenu.Font = "Monospace"
 	if err := u.engine.SetMenu(u.selected, jobMenu, "Text", 6); err != nil {

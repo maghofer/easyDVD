@@ -12,11 +12,13 @@ import (
 	"sync"
 	"time"
 
+	"easydvd/internal/model"
 	"easydvd/internal/process"
 )
 
 type Tools struct {
 	FFmpeg, FFprobe, DVDAuthor, Spumux, Mkisofs string
+	HCenc, FFMS2, AviSynth                      string
 	FFmpegIssue                                 string
 }
 type ToolStatus struct{ Name, Path, Version, Error string }
@@ -54,7 +56,9 @@ func FindAuthoringTools() Tools {
 		}
 		return ""
 	}
-	return Tools{DVDAuthor: find("dvdauthor"), Spumux: find("spumux"), Mkisofs: find("mkisofs")}
+	t := Tools{DVDAuthor: find("dvdauthor"), Spumux: find("spumux"), Mkisofs: find("mkisofs")}
+	t.HCenc, t.FFMS2, t.AviSynth = findHCenc()
+	return t
 }
 
 func FindTools() Tools {
@@ -92,13 +96,18 @@ func (t Tools) Check(ctx context.Context) []ToolStatus {
 		}
 		out = append(out, s)
 	}
+	hc := ToolStatus{Name: "Quality (hcenc) encoder", Path: t.HCenc, Version: "32-bit HCEnc / AviSynth / FFMS2 (HCEnc 0.28 required)"}
+	if err := t.RequireProfile(model.Settings{EncodingProfile: model.ProfileQuality}); err != nil {
+		hc.Error = err.Error()
+	}
+	out = append(out, hc)
 	return out
 }
 func (t Tools) CheckAuthoring(ctx context.Context) []ToolStatus {
 	all := t.Check(ctx)
 	var authors []ToolStatus
 	for _, s := range all {
-		if s.Name != "FFmpeg" && s.Name != "FFprobe" {
+		if s.Name == "dvdauthor" || s.Name == "spumux" || s.Name == "mkisofs" {
 			authors = append(authors, s)
 		}
 	}

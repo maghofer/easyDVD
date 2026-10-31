@@ -1,8 +1,10 @@
 # DVD encoding quality
 
-FFmpeg is the sole video encoder. The normal package keeps FFmpeg/FFprobe
-external: locate a compatible installation or accept the app's private download.
-There is no separate encoder runtime to install.
+Balanced uses FFmpeg. Quality uses HCEnc 0.28 with the encoder settings from
+the supplied AVStoDVD 2.8.9 log. FFmpeg/FFprobe remain external: locate a
+compatible installation or accept the app's private download. Quality's source-built
+32-bit AviSynth+ / FFMS2 support libraries are included; HCEnc is a separate
+verified download through Quality setup.
 
 **Balanced is the default for new jobs.** Choose Balanced or Quality directly
 in Job settings before processing starts. The choice is saved per job; started
@@ -12,13 +14,11 @@ jobs. CLI and benchmark accept `-profile Balanced` or `-profile Quality`.
 | Profile | Video target / peak | Stereo AC-3 | Intended use |
 |---|---|---|---|
 | Balanced (default) | 7,500 / 9,000 kbps | 256 kbps / 48 kHz | Faster encoding, smaller files, good DVD quality |
-| Quality | 9,000 / 9,000 kbps | 448 kbps / 48 kHz | More detail analysis and the full conservative rate budget |
+| Quality | 8,500 / 9,000 kbps | 448 kbps / 48 kHz | HCEnc BEST, AVStoDVD two-pass VBR settings |
 
-Both profiles use two passes, RD macroblock decisions and intra VLC. Balanced
-uses a quantizer floor of 2 and the fast default motion search without trellis
-or the extra searches in Quality. On the measured 60-second film sample it
-encoded in 2.96 s versus 12.47 s for Quality, with 20% less video data. See
-[the Balanced measurements and Scope check](../validation/BALANCED-SCOPE-2026-10-29.md).
+Balanced's parameters and cache identity are unchanged. Its earlier measurements
+are in [the Balanced report](../validation/BALANCED-SCOPE-2026-10-29.md); the
+FFmpeg Quality comparison in that report describes the previous encoder.
 
 ## Bitrate and disc space
 
@@ -35,44 +35,95 @@ Very simple material can also use fewer bits after reaching the profile's
 minimum quantizer.
 ISO size checks and packing reserves remain authoritative for disc capacity.
 
+## Quality runtime setup
+
+Install or extract the complete package, including `tools/quality`. It contains
+source-built 32-bit `avisynth.dll` and `ffms2.dll`. After FFmpeg setup/checking,
+the GUI automatically downloads HCEnc if it is missing. The 2.2 MB ZIP comes
+directly from the author at `http://hank315.nl/`. The legacy site uses HTTP;
+pinned SHA-256 checks on both archive and encoder must pass before installation.
+Only HCEnc and its original notices are extracted.
+AVStoDVD is not installed. No codec registration or PATH change is required.
+The private encoder cache survives upgrades and uninstall. CLI setup uses
+`-download-hcenc`. Cancel or close the setup dialog to stop the download. If offline,
+use Balanced and retry from **Settings → Repair dependencies → Quality (hcenc) setup**
+or **Media tools → Quality (hcenc) setup**. A verified
+cached encoder is reused without another download. Missing HCEnc is retried on
+the next launch; an explicit `EASYDVD_HCENC` selection is left to the user.
+Bundled notices are in `notices/quality`, and DLL hashes in `quality-binaries.json`.
+The matching source package includes all four library source archives and the
+build recipe. DevIL is no longer required by the distributed runtime.
+See [the runtime record](../scripts/quality-runtime/README.md).
+
+For a custom runtime, set `EASYDVD_HCENC` to a folder containing `HCenc.exe`,
+`ffms2.dll` and a portable `avisynth.dll` beside the executable. Classic
+AviSynth also requires `DevIL.dll` beside its DLL.
+The AVStoDVD layout (`HCenc/HCenc.exe`, `Lib/ffms2.dll`, installed AviSynth)
+also works. Explicit `EASYDVD_HCENC` / `EASYDVD_TOOLS` choices take precedence;
+automatic discovery prefers `tools/quality` before external installations. A
+partial bundled runtime is reported rather than mixed with a system AviSynth.
+The `quality` child of an override folder is supported. All runtime binaries must be 32-bit.
+Missing components block Quality with a setup message; there is no automatic
+fallback to FFmpeg Quality.
+The Tools dialog reports the optional Quality runtime. CLI
+`-check-tools -profile Quality` also requires it to be present.
+
 ## Quality profile
 
-Both passes use these quality settings:
+The generated HCEnc INI uses:
 
 ```text
--c:v mpeg2video -profile:v 4 -level:v 8 -pix_fmt yuv420p
--b:v 9000k -maxrate:v 9000k -minrate:v 0 -bufsize:v 1835008
--qmin 1 -lmin 118 -mbd rd -trellis 1 -intra_vlc 1
--cmp satd -subcmp satd -mepre 1 -precmp satd
--dia_size 2 -pre_dia_size 2 -last_pred 3 -bidir_refine 2
--mpv_flags +mv0+cbp_rd
--bf 2 -flags +cgop -sc_threshold 1000000000 -dc 10
+*AVSRELOAD
+*MAXBITRATE 9000
+*BITRATE 8500
+*PROFILE BEST
+*ASPECT 16:9
+*PROGRESSIVE
+*TFF
+*BIAS 80
+*DC_PREC 10
+*MATRIX MPEG
+*AQ 1
+*LUMGAIN 1
+*SMP
+*PRIORITY IDLE
 ```
 
-This is MPEG-2 Main Profile at Main Level. PAL uses 720×576 at 25 fps with a
-maximum 15-picture GOP; NTSC uses 720×480 at 30000/1001 fps with an 18-picture
-GOP. Closed GOPs and two B pictures are retained. The display aspect is 4:3 or
-16:9 according to the actual picture. Each pass gets up to eight software
-encoding threads, scaled down for the configured one or two concurrent titles.
+Aspect, frame type and field order follow the source and selected DVD standard:
+4:3 sources use `*ASPECT 4:3`; retained interlaced footage uses `*INTERLACED`
+and TFF/BFF as appropriate. HCEnc's automatic GOP and scene detection remain
+enabled, as in the log. PAL uses 720×576 at 25 fps; NTSC uses 720×480 at
+30000/1001 fps. The command explicitly selects `-2pass`, runs without the
+encoder GUI and exits immediately (`-silent -wait 0`). Database/input/output
+paths belong to the title's private work directory. The complete INI, input
+script and HCEnc report are recorded in the job log.
 
-`qmin 1` and `lmin 118` permit finer quantization when space permits. Raising
-only the target bitrate left the previous profile limited by quantizer 2 on
-the tested footage. Rate-distortion macroblock decisions, trellis quantization,
-intra VLC coding and the motion-search settings improve the use of available
-bits. Nonlinear quantization and quantizer RD search were tested but omitted
-because they regressed some of the supplied film samples.
+FFmpeg prepares a temporary lossless FFV1/YUV420 SD input. FFMS2 serves this
+through AviSynth to HCEnc, supporting both the C plugin supplied by AVStoDVD
+and C++ plugin builds. This preserves easyDVD's existing source selection,
+rotation, crop, scaling, color and frame-rate handling. It matches the HCEnc
+encoder settings, rather than duplicating AVStoDVD's A2DSource/DirectShow,
+ColorMatrix and Spline36Resize script. Both profiles currently retain easyDVD's
+Lanczos/BT.601 preparation; their pixels need not match AVStoDVD exactly.
 
-Pass one writes statistics without audio. Pass two encodes the selected audio
-track to stereo AC-3 at **448 kbps / 48 kHz** in Quality or **256 kbps / 48 kHz**
-in Balanced, pads short audio, and creates silence
-when needed. DVD muxing uses `-f dvd -muxrate 10080k -packetsize 2048`. The
-source duration limits the result; every encoded MPG is fully decoded and
-hashed before it can become a reusable checkpoint. A profile version change
-invalidates incompatible encoded checkpoints when an unfinished job resumes.
-Existing Quality encodes retain their cache identity; saved jobs predating the
-profile selector retain Quality. Switching profiles produces a different key.
+The temporary lossless input and elementary stream are removed after each
+attempt, including cancellation/failure. Free-space checks reserve a conservative
+raw-frame bound for concurrent Quality workers; long titles can require
+substantial additional work space. HCEnc uses SMP at idle priority, with one
+or two concurrent titles according to the worker setting.
 
-Balanced replaces the target with `-b:v 7500k` and uses these analysis options:
+FFmpeg stream-copies HCEnc video and encodes the selected audio as stereo AC-3
+at **448 kbps / 48 kHz**. It pads short audio or creates silence, and muxes with
+`-f dvd -muxrate 10080k -packetsize 2048`. The source duration limits the result.
+Every encoded MPG is fully decoded and hashed before checkpoint publication.
+The new Quality cache identity invalidates old FFmpeg Quality checkpoints in
+unfinished jobs. Balanced checkpoints keep their identity. Saved jobs predating
+the profile selector retain Quality, now requiring HCEnc when encoding resumes.
+
+## Balanced profile
+
+Balanced retains FFmpeg two-pass MPEG-2 at 7,500 kbps target, 9,000 kbps peak,
+256 kbps / 48 kHz stereo AC-3, and these analysis options:
 
 ```text
 -qmin 2 -lmin 236 -mbd rd -intra_vlc 1
@@ -80,9 +131,9 @@ Balanced replaces the target with `-b:v 7500k` and uses these analysis options:
 
 Trellis, SATD searches, motion prepass, larger search patterns, extra predictors,
 bidirectional refinement and `mpv_flags` overrides are left at FFmpeg defaults.
-The DVD raster, peak rate, VBV, GOPs, aspect and field handling are shared.
-The quantizer floor avoids spending unnecessary bits on clean/simple scenes;
-Quality permits quantizer 1 when its slower analysis can preserve more detail.
+Balanced keeps closed GOPs, two B pictures and a 15/18-picture PAL/NTSC GOP.
+The DVD raster, peak rate, VBV, aspect and field handling are retained.
+The quantizer floor avoids spending unnecessary bits on clean/simple scenes.
 
 Resizing uses Lanczos and BT.601 limited-range output, with BT.709 input assumed
 for HD and BT.601 for SD. PAL tags are `bt470bg`, NTSC tags `smpte170m`, with
@@ -90,9 +141,8 @@ for HD and BT.601 for SD. PAL tags are `bt470bg`, NTSC tags `smpte170m`, with
 applied. Matching interlaced footage retains field-aware scaling, field order
 and `+ildct+ilme`; other interlaced footage is deinterlaced before conversion.
 
-The measured improvements, costs and validation scope are recorded in
-[the quality report](../validation/FFMPEG-QUALITY-2026-10-29.md). These are
-measurements on particular samples, not a universal claim about every source.
+The [earlier FFmpeg Quality report](../validation/FFMPEG-QUALITY-2026-10-29.md)
+is historical and does not measure the current HCEnc profile.
 
 ## Automatic pillarbox removal
 
@@ -127,9 +177,10 @@ documented by [dvdauthor](https://github.com/ldo/dvdauthor/blob/master/doc/dvdau
 ## Repeatable benchmark
 
 `easydvd-benchmark` prepares a progressive DVD-resolution YUV4MPEG reference,
-runs the production FFmpeg path, measures video size and PSNR/SSIM, and authors
+runs the selected production profile, measures video size and PSNR/SSIM, and authors
 a test ISO. The report records reference/source hashes, per-process wall and CPU
-time, and separate timings for both MPEG-2 passes. Audio and muxing are excluded
+time, and MPEG-2 encoding timings (one HCEnc process contains both passes).
+Audio and muxing are excluded
 from the reported elementary video size. Preparation, metrics and authoring
 are excluded from the encode timing.
 

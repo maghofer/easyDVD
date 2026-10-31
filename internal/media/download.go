@@ -245,17 +245,26 @@ func copyDownloaded(ctx context.Context, src, dest string) error {
 }
 
 func downloadArchive(ctx context.Context, client *http.Client, source, expected, path string, progress func(DownloadProgress)) error {
+	return downloadArchiveLimited(ctx, client, source, expected, path, progress, 0)
+}
+
+func downloadArchiveLimited(ctx context.Context, client *http.Client, source, expected, path string, progress func(DownloadProgress), maxBytes int64) error {
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, source, nil)
 	if err != nil {
 		return err
 	}
+	// Some upstream servers reject Go's default user agent.
+	request.Header.Set("User-Agent", "easyDVD/"+easydvd.Version())
 	response, err := client.Do(request)
 	if err != nil {
 		return err
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("FFmpeg download returned HTTP %d", response.StatusCode)
+		return fmt.Errorf("download returned HTTP %d", response.StatusCode)
+	}
+	if maxBytes > 0 && response.ContentLength > maxBytes {
+		return fmt.Errorf("download exceeds size limit")
 	}
 	file, err := os.Create(path)
 	if err != nil {
@@ -273,6 +282,9 @@ func downloadArchive(ctx context.Context, client *http.Client, source, expected,
 		}
 		n, e := response.Body.Read(buf)
 		if n > 0 {
+			if maxBytes > 0 && downloaded+int64(n) > maxBytes {
+				return fmt.Errorf("download exceeds size limit")
+			}
 			if _, err = writer.Write(buf[:n]); err != nil {
 				return err
 			}
@@ -290,11 +302,11 @@ func downloadArchive(ctx context.Context, client *http.Client, source, expected,
 		}
 	}
 	if response.ContentLength >= 0 && downloaded != response.ContentLength {
-		return fmt.Errorf("FFmpeg download was incomplete")
+		return fmt.Errorf("download was incomplete")
 	}
 	actual := hex.EncodeToString(hash.Sum(nil))
 	if actual != expected {
-		return fmt.Errorf("FFmpeg archive checksum mismatch; nothing was installed")
+		return fmt.Errorf("archive checksum mismatch; nothing was installed")
 	}
 	return file.Sync()
 }

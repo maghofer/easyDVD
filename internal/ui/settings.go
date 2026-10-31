@@ -48,11 +48,20 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 	packing.SetSelected(s.Packing)
 	workers := widget.NewSelect([]string{"1", "2"}, nil)
 	workers.SetSelected(strconv.Itoa(s.Encoders))
-	profile := widget.NewSelect([]string{model.ProfileBalanced, model.ProfileQuality}, nil)
-	profile.SetSelected(s.Profile())
-	jobProfile := widget.NewRadioGroup([]string{model.ProfileBalanced, model.ProfileQuality}, nil)
+	profileOptions := []string{model.ProfileLabel(model.ProfileBalanced), model.ProfileLabel(model.ProfileQuality)}
+	selectedProfile := s.Profile()
+	selectProfile := func(label string) {
+		for i, option := range profileOptions {
+			if label == option {
+				selectedProfile = []string{model.ProfileBalanced, model.ProfileQuality}[i]
+			}
+		}
+	}
+	profile := widget.NewSelect(profileOptions, selectProfile)
+	profile.SetSelected(model.ProfileLabel(s.Profile()))
+	jobProfile := widget.NewRadioGroup(profileOptions, selectProfile)
 	jobProfile.Horizontal, jobProfile.Required = true, true
-	jobProfile.SetSelected(s.Profile())
+	jobProfile.SetSelected(model.ProfileLabel(s.Profile()))
 	work := widget.NewEntry()
 	work.SetText(s.WorkDir)
 	appearance := widget.NewSelect([]string{"System", "Light", "Dark"}, nil)
@@ -105,13 +114,13 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 		next.Standard, next.Media = standard.Selected, medium.Selected
 		next.OutputDir = strings.TrimSpace(output.Text)
 		if defaults {
-			next.Packing, next.EncodingProfile = packing.Selected, profile.Selected
+			next.Packing, next.EncodingProfile = packing.Selected, selectedProfile
 			next.Encoders, _ = strconv.Atoi(workers.Selected)
 			next.WorkDir, next.Theme = strings.TrimSpace(work.Text), appearance.Selected
 			next.StageLocally, next.KeepWork = stage.Checked, keep.Checked
 		} else {
 			next.NoMenu = noMenu.Checked
-			next.EncodingProfile = jobProfile.Selected
+			next.EncodingProfile = selectedProfile
 		}
 		if err := next.Validate(); err != nil {
 			dialog.ShowError(err, u.win)
@@ -141,6 +150,9 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 		options.Add(stage)
 		options.Add(keep)
 		options.Add(u.updateSettings())
+		repair := widget.NewButton("Repair dependencies…", u.diagnostics)
+		repair.Importance = widget.LowImportance
+		options.Add(container.NewHBox(repair, layout.NewSpacer()))
 		buttons.Objects = append([]fyne.CanvasObject{widget.NewButtonWithIcon("Open logs folder", theme.FolderOpenIcon(), func() {
 			u.action(func() error {
 				if err := os.MkdirAll(u.engine.LogsDir(), 0755); err != nil {

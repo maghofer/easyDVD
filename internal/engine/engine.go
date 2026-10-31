@@ -933,16 +933,19 @@ func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) err
 			return err
 		}
 	}
-	var remaining, stage int64
+	var remaining, stage, qualityScratch int64
 	for _, v := range videos {
 		if v.Encoded == "" {
 			remaining += v.EstimatedBytes(s)
+			if s.Profile() == model.ProfileQuality {
+				qualityScratch = max(qualityScratch, media.HCencScratchBytes(v, s))
+			}
 		}
 		if v.Size > stage {
 			stage = v.Size
 		}
 	}
-	needWork := remaining + 2*s.Capacity() + (1 << 30)
+	needWork := remaining + 2*s.Capacity() + (1 << 30) + qualityScratch*int64(min(s.Encoders, len(videos)))
 	if s.StageLocally {
 		needWork += stage * int64(s.Encoders+1)
 	}
@@ -976,6 +979,9 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 		return err
 	}
 	if err := j.Settings.Validate(); err != nil {
+		return err
+	}
+	if err := e.tools.RequireProfile(j.Settings); err != nil {
 		return err
 	}
 	if err := fsops.RequireLocal(ctx, j.Settings.WorkDir); err != nil {

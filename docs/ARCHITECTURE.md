@@ -10,7 +10,7 @@ The only application download is an explicit user-requested FFmpeg setup action.
 - `store`: transactional SQLite snapshots, persisted ordering and preferences.
 - `engine`: queue scheduling, bounded work, commands, checkpoints and publishing.
 - `media`: FFprobe inspection, explicit FFmpeg argument generation, authoring XML,
-  tool discovery, media validation and hashing.
+  HCEnc Quality encoding, tool discovery, media validation and hashing.
 - `packing`: natural ordering, sequential packing, best-fit decreasing, bounded
   branch-and-bound search, title-count and conservative capacity constraints.
 - `menu`: Go-rendered backgrounds, television-safe button regions, highlight and
@@ -52,6 +52,16 @@ all affected disc numbering. Recovered ISOs are hashed before reuse.
 ## Media tool discovery and setup
 
 Authoring tools stay bundled. FFmpeg/FFprobe are external in the normal package.
+Quality uses bundled source-built 32-bit AviSynth+ and FFMS2 support in
+`tools/quality`, with a separately downloaded, hash-verified private HCEnc.
+Explicit overrides and installed AVStoDVD layouts remain supported. A partial
+bundle cannot silently borrow a system AviSynth. Legacy custom runtimes can
+resolve DevIL beside their selected AviSynth; the distributed runtime omits it.
+The application prepares a temporary lossless SD
+input, runs HCEnc BEST two-pass VBR with an isolated INI, then stream-copies the
+video while FFmpeg encodes AC-3 and multiplexes DVD packets. All processes use
+the same cancellation mechanism. Temporary lossless input is removed after
+each attempt, and disk checks reserve space for concurrent Quality workers.
 Explicit environment/saved folder choices take precedence; automatic discovery
 then checks PATH, a managed private download, and an optional offline sidecar.
 Every candidate is validated as a pair, including the supported release family

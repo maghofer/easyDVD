@@ -110,19 +110,12 @@ func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, 
 	if threads > 8 {
 		threads = 8
 	}
-	// Balanced retains the old quantizer floor to avoid spending unnecessary
-	// bits on easy material. Quality allows finer quantization and adds the
-	// costly searches. Both keep inexpensive RD macroblock decisions.
+	// This is the Balanced encoder. Quality is dispatched to HCEnc by Encode.
 	args = append(args, "-map", fmt.Sprintf("0:%d", v.VideoStream), "-vf", filter,
 		"-c:v", "mpeg2video", "-profile:v", "4", "-level:v", "8", "-pix_fmt", "yuv420p",
 		"-b:v", fmt.Sprintf("%dk", s.VideoBitrate()/1000), "-maxrate:v", "9000k", "-minrate:v", "0", "-bufsize:v", "1835008",
 		"-mbd", "rd", "-intra_vlc", "1")
-	if s.Profile() == model.ProfileQuality {
-		args = append(args, "-qmin", "1", "-lmin", "118", "-trellis", "1", "-cmp", "satd", "-subcmp", "satd", "-mepre", "1", "-precmp", "satd",
-			"-dia_size", "2", "-pre_dia_size", "2", "-last_pred", "3", "-bidir_refine", "2", "-mpv_flags", "+mv0+cbp_rd")
-	} else {
-		args = append(args, "-qmin", "2", "-lmin", "236")
-	}
+	args = append(args, "-qmin", "2", "-lmin", "236")
 	args = append(args,
 		"-g", s.GOP(), "-bf", "2", "-flags", flags, "-sc_threshold", "1000000000", "-dc", "10",
 		"-aspect", v.Aspect(), "-threads", strconv.Itoa(threads), "-pass", strconv.Itoa(pass), "-passlogfile", passlog,
@@ -152,6 +145,9 @@ func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, 
 }
 
 func (t Tools) Encode(ctx context.Context, v model.Video, s model.Settings, input, dir string, log io.Writer, progress func(float64)) (model.Video, error) {
+	if err := t.RequireProfile(s); err != nil {
+		return v, err
+	}
 	var err error
 	v, err = t.DetectPillarbox(ctx, v, input, log)
 	if err != nil {
@@ -167,22 +163,28 @@ func (t Tools) Encode(ctx context.Context, v model.Video, s model.Settings, inpu
 	if runtime.GOOS == "windows" {
 		null = "NUL"
 	}
-	for pass := 1; pass <= 2; pass++ {
-		out := null
-		if pass == 2 {
-			out = part
-		}
-		p := pass
-		err := process.Run(ctx, t.FFmpeg, EncodeArgs(v, s, input, passlog, out, pass), process.Options{Dir: dir, Log: log, Line: func(line string) {
-			if strings.HasPrefix(line, "out_time_us=") {
-				us, _ := strconv.ParseFloat(strings.TrimPrefix(line, "out_time_us="), 64)
-				if progress != nil {
-					progress(math.Min(1, (float64(p-1)+us/1e6/v.Duration)/2))
-				}
-			}
-		}})
-		if err != nil {
+	if s.Profile() == model.ProfileQuality {
+		if err := t.encodeHCenc(ctx, v, s, input, dir, part, log, progress); err != nil {
 			return v, err
+		}
+	} else {
+		for pass := 1; pass <= 2; pass++ {
+			out := null
+			if pass == 2 {
+				out = part
+			}
+			p := pass
+			err := process.Run(ctx, t.FFmpeg, EncodeArgs(v, s, input, passlog, out, pass), process.Options{Dir: dir, Log: log, Line: func(line string) {
+				if strings.HasPrefix(line, "out_time_us=") {
+					us, _ := strconv.ParseFloat(strings.TrimPrefix(line, "out_time_us="), 64)
+					if progress != nil {
+						progress(math.Min(1, (float64(p-1)+us/1e6/v.Duration)/2))
+					}
+				}
+			}})
+			if err != nil {
+				return v, err
+			}
 		}
 	}
 	// A complete decode catches truncated streams before they become reusable checkpoints.

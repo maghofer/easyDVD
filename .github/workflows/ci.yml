@@ -21,8 +21,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/cache@v4
         with:
-          path: .tools/authoring
-          key: ${{ runner.os }}-authoring-${{ hashFiles('scripts/toolchain/**', 'scripts/build-authoring.ps1', 'scripts/tools.lock.json') }}
+          path: |
+            .tools/authoring
+            .tools/quality-runtime
+          key: ${{ runner.os }}-media-${{ hashFiles('scripts/toolchain/**', 'scripts/quality-runtime/**', 'scripts/build-quality-runtime.ps1', 'scripts/build-authoring.ps1', 'scripts/tools.lock.json') }}
       - name: Prepare pinned development and media tools
         shell: pwsh
         run: ./scripts/bootstrap.ps1

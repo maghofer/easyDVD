@@ -190,6 +190,20 @@ func TestPipeline(t *testing.T) {
 			if j.State != model.Complete {
 				t.Fatal(j.Error)
 			}
+			if profile == model.ProfileQuality {
+				log, err := os.ReadFile(e.JobLogPath(j.ID))
+				if err != nil || !strings.Contains(string(log), "pass 2 encoding time:") || !strings.Contains(string(log), "*BIAS 80") {
+					t.Fatal("Quality must execute HCEnc with the AVStoDVD profile", err)
+				}
+				if err := filepath.WalkDir(s.WorkDir, func(path string, d os.DirEntry, err error) error {
+					if err == nil && d.IsDir() && strings.HasPrefix(d.Name(), "hcenc-") {
+						t.Errorf("temporary HCEnc input survived completed encode: %s", path)
+					}
+					return err
+				}); err != nil {
+					t.Fatal(err)
+				}
+			}
 			if len(j.Discs) != 1 {
 				t.Fatal(j.Discs)
 			}

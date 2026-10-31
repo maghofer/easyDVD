@@ -64,6 +64,7 @@ func (u *window) findMediaTools() {
 			u.mediaReady = true
 			u.mediaIssue = ""
 			u.refresh()
+			u.setupQualityOnLaunch()
 		})
 	}()
 }
@@ -152,6 +153,7 @@ func (u *window) showMediaSetup() {
 				u.mediaIssue = ""
 				u.refresh()
 				d.Hide()
+				u.setupQualityOnLaunch()
 				if saveErr != nil {
 					dialog.ShowError(fmt.Errorf("FFmpeg is ready for this session, but its location could not be saved: %w", saveErr), u.win)
 				}

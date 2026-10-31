@@ -1,5 +1,7 @@
 param([switch]$AuthoringOnly)
 . (Join-Path $PSScriptRoot 'common.ps1')
+. (Join-Path $PSScriptRoot 'quality-runtime/common.ps1')
+& (Join-Path $PSScriptRoot 'prepare-quality-runtime.ps1')
 $authorRoot = Get-AuthoringCacheRoot
 & (Join-Path $PSScriptRoot 'build-authoring.ps1') -OutputDir $authorRoot
 $target = Join-Path $ToolsRoot 'media/bin'
@@ -38,4 +40,7 @@ if (-not $AuthoringOnly) { $names += @('ffmpeg.exe','ffprobe.exe') }
 $files = $names | ForEach-Object { Get-Item -LiteralPath (Join-Path $target $_) } | Sort-Object Name
 $manifest = @($files | ForEach-Object { @{ name=$_.Name; sha256=(Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant() } })
 $manifest | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $ToolsRoot 'media/binaries.json') -Encoding UTF8
+$qualityTarget = Join-Path $target 'quality'
+New-Item -ItemType Directory -Force -Path $qualityTarget | Out-Null
+foreach ($entry in $QualityLock.binaries) { Copy-Item -LiteralPath (Join-Path (Get-QualityCacheRoot) "bin/$($entry.name)") -Destination $qualityTarget -Force }
 Write-Output "Prepared pinned tools in $target"

@@ -19,6 +19,7 @@ import (
 	"easydvd/internal/app"
 	"easydvd/internal/media"
 	"easydvd/internal/model"
+	"easydvd/internal/platform"
 	"easydvd/internal/process"
 )
 
@@ -57,6 +58,12 @@ type Report struct {
 }
 
 func main() {
+	release, err := platform.HoldInstallerMutex()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	defer release()
 	if ok, err := app.Worker(os.Args[1:]); ok {
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -73,7 +80,7 @@ func run() error {
 	input := flag.String("input", "", "Representative source video")
 	output := flag.String("output", "", "New directory for references, encoded samples, ISOs and report")
 	standard := flag.String("standard", "PAL", "PAL or NTSC")
-	profile := flag.String("profile", model.ProfileBalanced, "Balanced or Quality production encoding")
+	profile := flag.String("profile", model.ProfileBalanced, "Balanced (ffmpeg) or Quality (hcenc) production encoding; use Balanced or Quality as the value")
 	seconds := flag.Float64("seconds", 10, "Maximum sample duration")
 	offset := flag.Float64("offset", 0, "Start time in seconds for the sample")
 	repeats := flag.Int("repeats", 1, "Number of sequential production encoder runs")
@@ -113,6 +120,9 @@ func run() error {
 	}
 	tools := media.FindTools()
 	if err = tools.Require(); err != nil {
+		return err
+	}
+	if err = tools.RequireProfile(s); err != nil {
 		return err
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -164,8 +174,9 @@ func run() error {
 		LogicalCPUs: runtime.NumCPU(), Repeats: *repeats, Preparation: preparation,
 		InputMode: "DVD-resolution prepared progressive reference",
 		Notes: []string{
-			fmt.Sprintf("The %s two-pass FFmpeg profile targets %d kbps video with a 9 Mbps peak and %d kbps stereo AC-3. Video sizes exclude audio and DVD muxing.", s.Profile(), s.VideoBitrate()/1000, s.AudioBitrate()/1000),
+			fmt.Sprintf("The %s production profile targets %d kbps video with a 9 Mbps peak and %d kbps stereo AC-3. Balanced (ffmpeg) uses FFmpeg; Quality (hcenc) uses HCEnc BEST two-pass VBR. Video sizes exclude audio and DVD muxing.", model.ProfileLabel(s.Profile()), s.VideoBitrate()/1000, s.AudioBitrate()/1000),
 			"Seconds includes production encoding, audio/mux, complete decode validation and checkpoint hashing; EncodingSeconds isolates both MPEG-2 passes. Reference preparation, quality measurements and authoring are outside these timings.",
+			"The Quality (hcenc) profile's temporary lossless SD input preparation is included in Seconds and recorded separately in Steps; it is excluded from EncodingSeconds.",
 			"CPU percentages divide process CPU seconds by wall seconds and all logical CPUs. Runs are sequential.",
 			"SSIM/PSNR compare decoded output against the DVD-resolution reference. Visual assessment and physical-player compatibility still require separate review.",
 		}}
@@ -184,6 +195,9 @@ func run() error {
 	failed := false
 	for run := 1; run <= *repeats; run++ {
 		name := "FFmpeg"
+		if s.Profile() == model.ProfileQuality {
+			name = "HCEnc"
+		}
 
 		result := Result{Run: run, Encoder: name, Status: "encoding"}
 		measured := process.Observe(ctx, func(m process.Metrics) { result.Steps = append(result.Steps, m) })
@@ -204,7 +218,7 @@ func run() error {
 		var encodingCPU float64
 		for _, step := range result.Steps {
 			result.CPUSeconds += step.CPUSeconds
-			if hasArg(step.Args, "-pass") {
+			if hasArg(step.Args, "-pass") || hasArg(step.Args, "-2pass") {
 				result.EncodingSeconds += step.Seconds
 				encodingCPU += step.CPUSeconds
 			}

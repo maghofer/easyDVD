@@ -14,6 +14,10 @@
     "versions": "dvdauthor/spumux 0.7.2-easyDVD.1; mkisofs 2.01-bootcd.ru-easyDVD.1",
     "source": "scripts/toolchain/lock.json"
   },
+  "qualityRuntime": {
+    "id": "win32-source-2026.10.2",
+    "source": "scripts/quality-runtime/lock.json"
+  },
   "ffmpeg": {
     "version": "9.0.2",
     "url": "https://www.gyan.dev/ffmpeg/builds/packages/ffmpeg-9.0.2-full_build.7z",

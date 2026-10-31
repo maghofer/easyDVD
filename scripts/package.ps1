@@ -1,5 +1,6 @@
-param([string]$Version, [switch]$IncludeFFmpeg, [switch]$PublicRelease, [string]$CorrespondingSources, [string]$OutputDir)
+param([string]$Version, [switch]$IncludeFFmpeg, [switch]$PublicRelease, [string]$CorrespondingSources, [string]$OutputDir, [switch]$Installer, [string]$ISCCPath)
 . (Join-Path $PSScriptRoot 'common.ps1')
+. (Join-Path $PSScriptRoot 'quality-runtime/common.ps1')
 $Version = Get-AppVersion $Version
 & (Join-Path $PSScriptRoot 'audit-source.ps1')
 if (-not $OutputDir) { $OutputDir = Join-Path $ProjectRoot 'dist' }
@@ -12,6 +13,7 @@ $bundle = Join-Path $OutputDir $name
 $sources = "$bundle-sources"
 foreach ($path in @($bundle,$sources)) { if (Test-Path -LiteralPath $path) { throw "Package directory already exists: $path" } }
 & (Join-Path $PSScriptRoot 'prepare-tools.ps1') -AuthoringOnly:(-not $IncludeFFmpeg)
+Assert-QualityRuntime (Get-QualityCacheRoot) -PublicRelease:$PublicRelease
 if (-not $CorrespondingSources) { $CorrespondingSources = Join-Path (Get-AuthoringCacheRoot) 'sources' }
 if ($PublicRelease) {
     & (Join-Path $PSScriptRoot 'verify-toolchain-sources.ps1') -Directory $CorrespondingSources -BinaryManifest (Join-Path $ToolsRoot 'media/binaries.json')
@@ -21,6 +23,7 @@ New-Item -ItemType Directory -Force -Path $bundle,(Join-Path $bundle 'tools'),(J
 foreach ($exe in @('easyDVD.exe','easydvd-cli.exe','easydvd-benchmark.exe')) { Copy-Item -LiteralPath (Join-Path $buildDir $exe) -Destination $bundle }
 $manifest = @(Get-Content -LiteralPath (Join-Path $ToolsRoot 'media/binaries.json') -Raw | ConvertFrom-Json | Where-Object { $IncludeFFmpeg -or $_.name -notin @('ffmpeg.exe','ffprobe.exe') })
 foreach ($entry in $manifest) { Copy-Item -LiteralPath (Join-Path $ToolsRoot "media/bin/$($entry.name)") -Destination (Join-Path $bundle 'tools') }
+Copy-QualityRuntime $bundle
 ConvertTo-Json -InputObject @($manifest) -Depth 5 | Set-Content -LiteralPath (Join-Path $bundle 'binaries.json') -Encoding UTF8
 Copy-Item -LiteralPath (Join-Path (Get-AuthoringCacheRoot) 'sources/notices') -Destination (Join-Path $bundle 'notices/authoring') -Recurse
 Copy-Item -LiteralPath (Join-Path $ProjectRoot 'licenses') -Destination (Join-Path $bundle 'notices/build-runtime') -Recurse
@@ -37,7 +40,7 @@ foreach ($file in $documentation) {
 }
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'tools.lock.json') -Destination $bundle
 $Version | Set-Content -LiteralPath (Join-Path $bundle 'VERSION') -Encoding utf8
-@{version=$Version; repository=(Get-Content -LiteralPath (Join-Path $ProjectRoot 'RELEASE_REPOSITORY') -Raw).Trim(); publicRelease=[bool]$PublicRelease; offline=[bool]$IncludeFFmpeg; authoringToolchain=$ToolLock.authoring.id; commit=(& git -C $ProjectRoot rev-parse --verify HEAD 2>$null)} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $bundle 'release.json') -Encoding utf8
+@{version=$Version; repository=(Get-Content -LiteralPath (Join-Path $ProjectRoot 'RELEASE_REPOSITORY') -Raw).Trim(); publicRelease=[bool]$PublicRelease; offline=[bool]$IncludeFFmpeg; authoringToolchain=$ToolLock.authoring.id; qualityRuntime=$QualityLock.id; qualityDistributionReview=$QualityLock.distributionReview; commit=(& git -C $ProjectRoot rev-parse --verify HEAD 2>$null)} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $bundle 'release.json') -Encoding utf8
 Use-DevTools
 Push-Location $ProjectRoot
 try {
@@ -73,6 +76,8 @@ try {
     & tar.exe -a -cf (Join-Path $sources 'easyDVD-source.zip') -C $ProjectRoot -T $sourceList
     Assert-Exit 'Archive application source'
     if ($CorrespondingSources) { Copy-Item -LiteralPath $CorrespondingSources -Destination (Join-Path $sources 'toolchain') -Recurse }
+    Copy-Item -LiteralPath (Join-Path (Get-QualityCacheRoot) 'sources') -Destination (Join-Path $sources 'quality-runtime') -Recurse
+    Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'quality-runtime/README.md') -Destination (Join-Path $sources 'quality-runtime/README.md')
     $toolVersions = & (Join-Path $bundle 'easydvd-cli.exe') -check-authoring-tools
     Assert-Exit 'Check bundled authoring tools'
     if ($IncludeFFmpeg) {
@@ -91,4 +96,7 @@ foreach ($directory in @($bundle,$sources)) {
     & tar.exe -a -cf "$directory.zip" -C (Split-Path $directory) (Split-Path $directory -Leaf)
     Assert-Exit 'Create package ZIP'
     Write-Output "$directory.zip"
+}
+if ($Installer) {
+    & (Join-Path $PSScriptRoot 'build-installer.ps1') -BundleDirectory $bundle -OutputDir $OutputDir -ISCCPath $ISCCPath -PublicRelease:$PublicRelease
 }

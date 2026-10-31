@@ -52,6 +52,7 @@ type window struct {
 	mediaChecking                                           bool
 	mediaIssue                                              string
 	mediaDialog                                             dialog.Dialog
+	qualityDialog                                           dialog.Dialog
 	dropBar                                                 *fyne.Container
 	app                                                     fyne.App
 	win                                                     fyne.Window
@@ -222,15 +223,14 @@ func (u *window) addFolders() {
 func (u *window) build() fyne.CanvasObject {
 	brand := newBrandLogo()
 	u.start = widget.NewButtonWithIcon("Start queue", theme.MediaPlayIcon(), func() {
-		if u.ensureMedia() {
+		if u.ensureMedia() && u.ensureQuality() {
 			u.action(func() error { u.engine.Start(); return nil })
 		}
 	})
 	u.start.Importance = widget.HighImportance
 	u.pause = widget.NewButtonWithIcon("Pause", theme.MediaPauseIcon(), func() { u.action(func() error { u.engine.Pause(); return nil }) })
 	preferences := widget.NewButtonWithIcon("Default settings", theme.SettingsIcon(), func() { u.settingsDialog("", u.snapshot.Settings) })
-	diagnostics := newFileAction(u, nil, "Media tools")
-	diagnostics.SetText("!")
+	diagnostics := newFileAction(u, mediaToolsIcon, "Media tools")
 	diagnostics.Importance = widget.MediumImportance
 	diagnostics.OnTapped = u.diagnostics
 	controls := container.NewCenter(container.NewHBox(u.start, u.pause, preferences, diagnostics))
@@ -383,7 +383,8 @@ func (u *window) diagnostics() {
 	holder := container.NewStack(widget.NewLabel("Checking bundled tools…"))
 	var d *dialog.CustomDialog
 	setup := widget.NewButton("FFmpeg setup", func() { d.Hide(); u.showMediaSetup() })
-	d = dialog.NewCustom("Media tools", "Close", container.NewBorder(nil, setup, nil, nil, holder), u.win)
+	quality := widget.NewButton("Quality (hcenc) setup", func() { d.Hide(); u.showQualitySetup() })
+	d = dialog.NewCustom("Media tools", "Close", container.NewBorder(nil, container.NewHBox(setup, quality), nil, nil, holder), u.win)
 	d.Resize(fyne.NewSize(760, 500))
 	d.Show()
 	u.action(func() error {
