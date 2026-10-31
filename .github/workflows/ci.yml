@@ -27,7 +27,9 @@ jobs:
           key: ${{ runner.os }}-media-${{ hashFiles('scripts/toolchain/**', 'scripts/quality-runtime/**', 'scripts/build-quality-runtime.ps1', 'scripts/build-authoring.ps1', 'scripts/tools.lock.json') }}
       - name: Prepare pinned development and media tools
         shell: pwsh
-        run: ./scripts/bootstrap.ps1
+        run: |
+          ./scripts/prepare-quality-source-downloads.ps1
+          ./scripts/bootstrap.ps1
       - name: Build and validate DVD pipeline
         shell: pwsh
         run: ./scripts/build.ps1 -Test -Integration

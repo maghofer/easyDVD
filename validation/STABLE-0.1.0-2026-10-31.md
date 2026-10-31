@@ -11,6 +11,11 @@ SHA-256 files. `VERSION` is `0.1.0`; the release tag is `v0.1.0`.
 - All Go tests passed, including the CI build-tag configuration. `go vet` passed
   for both configurations. PowerShell scripts parsed successfully; source and
   whitespace audits passed.
+- The hosted Windows build encountered an unavailable FFmpeg source server.
+  CI now preseeds the original archive from Buildroot's source mirror and checks
+  it against the unchanged upstream SHA-256 pin before the builder uses it.
+  The mirrored archive was independently downloaded and matched the existing pin;
+  compiler inputs, support binaries and encoding behavior are unchanged.
 - The real Windows integration suite passed in 33.291 seconds, including
   Balanced and Quality PAL/NTSC encoding, actual DVD authoring, menus, geometry,
   field handling, audio and recovery checks. Tests used isolated queues and work.
