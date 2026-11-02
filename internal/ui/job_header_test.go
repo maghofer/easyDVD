@@ -17,10 +17,10 @@ import (
 func TestJobHeaderHasFixedCompactInformation(t *testing.T) {
 	u := fileListFixture(t)
 	height := u.jobHeader.Size().Height
-	if height > 100 || u.files.Size().Height < 300 {
+	if height > 140 || u.files.Size().Height < 270 {
 		t.Fatalf("header is too tall: %v", u.jobHeader.Size())
 	}
-	if !u.source.Visible() || u.source.Text != u.selectedJob().Folder || !u.settings.Visible() || !u.renameJob.Visible() {
+	if !u.source.Visible() || u.source.Text != u.selectedJob().Folder || !u.renameJob.Visible() {
 		t.Fatal("compact header hides job information or actions")
 	}
 	if !u.jobOutput.Visible() || u.jobOutput.Text != "Output: "+u.selectedJob().Settings.OutputDir {
@@ -33,29 +33,44 @@ func TestJobHeaderHasFixedCompactInformation(t *testing.T) {
 		t.Fatalf("title-edit icon is not beside the title: gap=%v", gap)
 	}
 	var openOutput bool
-	var outputButton *widget.Button
+	var dropdowns int
 	walkFileTestObjects(u.jobHeader, func(object fyne.CanvasObject) {
-		if b, ok := object.(*widget.Button); ok && b.Text == "Open output" {
-			openOutput = true
-			outputButton = b
+		if _, ok := object.(*widget.Select); ok {
+			dropdowns++
 		}
-		if b, ok := object.(*widget.Button); ok && b.Text == "Menu" {
-			t.Fatal("redundant menu button is still in the header")
+		if b, ok := object.(*fileAction); ok && b.hint == "Open output folder" && b.Text == "" {
+			openOutput = true
+		}
+		if b, ok := object.(*widget.Button); ok && b.Text == "Job settings" {
+			t.Fatal("old job settings button is still in the header")
 		}
 		if _, ok := object.(*widget.RadioGroup); ok {
-			t.Fatal("encoding controls are still in the header")
+			t.Fatal("unexpected radio controls")
 		}
 		if label, ok := object.(*widget.Label); ok && label.Text == string(u.selectedJob().State) {
 			t.Fatal("job status is repeated in the header")
 		}
 	})
-	if !openOutput {
-		t.Fatal("output action has no text label")
+	if dropdowns != 2 {
+		t.Fatalf("header has %d dropdowns; want only encoding and menu presets", dropdowns)
 	}
-	settingsPos := u.app.Driver().AbsolutePositionForObject(u.settings)
-	outputPos := u.app.Driver().AbsolutePositionForObject(outputButton)
-	if settingsPos.Y != outputPos.Y {
-		t.Fatal("Job settings and Open output are not on the same row")
+	if u.jobOutput.TextStyle.Underline {
+		t.Fatal("output path is still underlined")
+	}
+	pathPos := u.app.Driver().AbsolutePositionForObject(u.jobOutput)
+	editPos := u.app.Driver().AbsolutePositionForObject(u.editOutput)
+	openPos := u.app.Driver().AbsolutePositionForObject(u.openOutput)
+	if gap := editPos.X - pathPos.X - u.jobOutput.Size().Width; gap < 0 || gap > 8 {
+		t.Fatalf("output edit pen is not next to the path: gap %v", gap)
+	}
+	if openPos.X <= editPos.X || openPos.Y != editPos.Y {
+		t.Fatal("open output icon is not beside the output edit pen")
+	}
+	if !openOutput {
+		t.Fatal("output action has no tooltip or is not icon-only")
+	}
+	if !u.dvdButton.Visible() || !u.headerEncodingPreset.Visible() || !u.headerMedia.Visible() {
+		t.Fatal("inline job settings missing")
 	}
 	if !u.jobWarning.Visible() || u.jobWarning.Text != "1 file issue" {
 		t.Fatal("file issue was hidden")
@@ -121,7 +136,7 @@ func TestFooterProgressFollowsActivity(t *testing.T) {
 		u.snapshot.Jobs[0].State = tc.state
 		u.snapshot.Jobs[0].Progress = tc.progress
 		u.refresh()
-		if u.footerProgress.Visible() != tc.visible || u.jobHeader.Size().Height > 100 {
+		if u.footerProgress.Visible() != tc.visible || u.jobHeader.Size().Height > 150 {
 			t.Fatalf("incorrect progress visibility for %s at %v", tc.state, tc.progress)
 		}
 	}

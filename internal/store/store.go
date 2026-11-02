@@ -39,6 +39,7 @@ func Open(path string) (*Store, error) {
  CREATE TABLE IF NOT EXISTS jobs (id TEXT PRIMARY KEY, position INTEGER NOT NULL, payload BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS preferences (key TEXT PRIMARY KEY, payload BLOB NOT NULL);
  CREATE TABLE IF NOT EXISTS menu_presets (name TEXT PRIMARY KEY COLLATE NOCASE, payload BLOB NOT NULL);
+ CREATE TABLE IF NOT EXISTS encoding_presets (name TEXT PRIMARY KEY COLLATE NOCASE, payload BLOB NOT NULL);
  PRAGMA user_version=1;`)
 	if err != nil {
 		db.Close()
@@ -104,10 +105,21 @@ func (s *Store) Settings(fallback model.Settings) (model.Settings, error) {
 	// New pending jobs adopt current defaults; saved started jobs retain theirs.
 	v := fallback
 	err = json.Unmarshal(b, &v)
+	var saved map[string]json.RawMessage
+	if json.Unmarshal(b, &saved) == nil && saved["app_settings_version"] == nil {
+		v.Encoders = 0
+		v.AppSettingsVersion = 1
+	}
+	v.Packing = "Strict order"
 	return v, err
 }
 func (s *Store) SaveSettings(v model.Settings) error {
-	b, err := json.Marshal(v)
+	// Persist an explicit false in preferences while old job/generation JSON
+	// can omit the newly added application-only fields.
+	b, err := json.Marshal(struct {
+		model.Settings
+		AutoCheckUpdates bool `json:"auto_check_updates"`
+	}{v, v.AutoCheckUpdates})
 	if err != nil {
 		return err
 	}

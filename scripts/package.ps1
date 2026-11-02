@@ -24,6 +24,8 @@ foreach ($exe in @('easyDVD.exe','easydvd-cli.exe','easydvd-benchmark.exe')) { C
 $manifest = @(Get-Content -LiteralPath (Join-Path $ToolsRoot 'media/binaries.json') -Raw | ConvertFrom-Json | Where-Object { $IncludeFFmpeg -or $_.name -notin @('ffmpeg.exe','ffprobe.exe') })
 foreach ($entry in $manifest) { Copy-Item -LiteralPath (Join-Path $ToolsRoot "media/bin/$($entry.name)") -Destination (Join-Path $bundle 'tools') }
 Copy-QualityRuntime $bundle
+Copy-Item -LiteralPath (Join-Path $buildDir 'tools/bluray') -Destination (Join-Path $bundle 'tools/bluray') -Recurse
+Copy-Item -LiteralPath (Join-Path $buildDir 'bluray-sources') -Destination (Join-Path $sources 'bluray') -Recurse
 ConvertTo-Json -InputObject @($manifest) -Depth 5 | Set-Content -LiteralPath (Join-Path $bundle 'binaries.json') -Encoding UTF8
 Copy-Item -LiteralPath (Join-Path (Get-AuthoringCacheRoot) 'sources/notices') -Destination (Join-Path $bundle 'notices/authoring') -Recurse
 Copy-Item -LiteralPath (Join-Path $ProjectRoot 'licenses') -Destination (Join-Path $bundle 'notices/build-runtime') -Recurse

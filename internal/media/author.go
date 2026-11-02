@@ -49,8 +49,8 @@ func AuthorXML(videos []model.Video, pages []menu.Page, s model.Settings, dir st
 			fmt.Fprintf(&b, "if (g1 eq %d) { jump title %d; } ", i+1, i+1)
 		}
 		fmt.Fprintf(&b, "} g0 = 0; button = g3;</pre><vob file=\"page-%03d.mpg\" pause=\"inf\"/>\n", p.Number)
-		for _, bt := range p.Buttons {
-			fmt.Fprintf(&b, "<button name=\"%s\">%s</button>\n", bt.Name, menu.Escape(bt.Command))
+		for k, bt := range p.Buttons {
+			fmt.Fprintf(&b, "<button name=\"%s\">%s</button>\n", bt.Name, menu.Escape(bt.DVDCommand(k)))
 		}
 		b.WriteString("</pgc>\n")
 	}
@@ -102,6 +102,9 @@ func autoplayXML(videos []model.Video, s model.Settings, dir string) string {
 }
 
 func (t Tools) Author(ctx context.Context, j model.Job, disc model.Disc, total int, dir string, log io.Writer, stage func(string) error) (string, error) {
+	if j.Settings.IsBluray() {
+		return t.authorBluray(ctx, j, disc, total, dir, log, stage)
+	}
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return "", err
 	}

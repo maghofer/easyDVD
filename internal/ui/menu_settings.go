@@ -26,8 +26,14 @@ import (
 )
 
 func (u *window) menuSettings(id string) fyne.Window {
+	return u.menuSettingsTargets(id, nil)
+}
+func (u *window) menuSettingsTargets(id string, ids []string) fyne.Window {
+	return u.menuSettingsPreset(id, ids, "")
+}
+func (u *window) menuSettingsPreset(id string, ids []string, initialPreset string) fyne.Window {
 	base := u.snapshot.Settings
-	job := model.Job{Title: "DVD collection", Settings: base}
+	job := model.Job{Title: "Disc collection", Settings: base}
 	if id != "" {
 		found := false
 		for _, j := range u.snapshot.Jobs {
@@ -57,7 +63,7 @@ func (u *window) menuSettings(id string) fyne.Window {
 				items = append(items, packing.Item{ID: v.ID, Bytes: v.EstimatedBytes(base), Order: i})
 			}
 		}
-		if plan, err := packing.Plan(ctx, items, base.Capacity(), base.Packing == "Space efficiency", 0); err == nil {
+		if plan, err := packing.PlanSettings(ctx, items, base, 0); err == nil {
 			job.Discs = plan.Discs
 		}
 	}
@@ -94,6 +100,9 @@ func (u *window) menuSettings(id string) fyne.Window {
 		scope.SetText("Started/finished set: preview changes and save presets here. Apply defaults for new jobs; existing ISOs stay unchanged.")
 	}
 	scope.Wrapping = fyne.TextWrapWord
+	if len(ids) > 1 {
+		scope.SetText(fmt.Sprintf("Editing menus for %d selected jobs. Applying replaces the menu settings of every selected job.", len(ids)))
+	}
 	discChoice := widget.NewSelect(nil, nil)
 	pageChoice := widget.NewSelect(nil, nil)
 	discOptions := []string{"1"}
@@ -220,7 +229,7 @@ func (u *window) menuSettings(id string) fyne.Window {
 						break
 					}
 					v.Thumbnail = filepath.Join(session, model.Hash(v.ID)+".jpg")
-					if e := u.engine.Tools().Thumbnail(renderCtx, *v, v.Path, v.Thumbnail, nil); e != nil {
+					if e := u.engine.Tools().ThumbnailFor(renderCtx, *v, s, v.Path, v.Thumbnail, nil); e != nil {
 						err = e
 						break
 					}
@@ -358,6 +367,10 @@ func (u *window) menuSettings(id string) fyne.Window {
 					names = append(names, p.Name)
 				}
 				preset.SetOptions(names)
+				if initialPreset != "" {
+					preset.SetSelected(initialPreset)
+					initialPreset = ""
+				}
 			})
 		}()
 	}
@@ -391,6 +404,9 @@ func (u *window) menuSettings(id string) fyne.Window {
 		}
 		name := widget.NewEntry()
 		name.SetPlaceHolder("Preset name")
+		if preset.Selected != "Current settings" && preset.Selected != "Default" {
+			name.SetText(preset.Selected)
+		}
 		d := dialog.NewForm("Save menu preset", "Save", "Cancel", []*widget.FormItem{widget.NewFormItem("Name", name)}, func(ok bool) {
 			if !ok {
 				return
@@ -411,6 +427,8 @@ func (u *window) menuSettings(id string) fyne.Window {
 						return
 					}
 					refreshPresets()
+					u.loadHeaderPresets()
+					u.refreshHeaderSettings()
 					status.SetText("Preset saved: " + p.Name)
 				})
 			}()
@@ -424,7 +442,12 @@ func (u *window) menuSettings(id string) fyne.Window {
 			return
 		}
 		go func() {
-			e := u.engine.SetMenu(target, s.Menu, s.Layout, s.TitlesPerPage)
+			var e error
+			if target != "" && len(ids) > 1 {
+				e = u.engine.ApplyMenus(ids, s.Menu, s.Layout, s.TitlesPerPage)
+			} else {
+				e = u.engine.SetMenu(target, s.Menu, s.Layout, s.TitlesPerPage)
+			}
 			fyne.Do(func() {
 				if ctx.Err() != nil {
 					return
@@ -438,6 +461,9 @@ func (u *window) menuSettings(id string) fyne.Window {
 		}()
 	}
 	applyJob := widget.NewButton("Apply to job", func() { apply(id) })
+	if len(ids) > 1 {
+		applyJob.SetText(fmt.Sprintf("Apply to %d jobs", len(ids)))
+	}
 	if id == "" || job.Locked {
 		applyJob.Disable()
 	}
@@ -466,7 +492,7 @@ func (u *window) menuSettings(id string) fyne.Window {
 	}))
 	form := widget.NewForm(widget.NewFormItem("Menu aspect", aspect), widget.NewFormItem("Layout", menuLayout), widget.NewFormItem("Titles per page", density), widget.NewFormItem("Background", container.NewVBox(backgroundLabel, bgButtons)), widget.NewFormItem("Dim image", container.NewVBox(dimming, dimLabel)), widget.NewFormItem("Font", container.NewVBox(fontChoice, fontLabel, widget.NewButton("Load font (TTF/OTF)…", func() { choose("font") }))), widget.NewFormItem("Font color", colorField(fontColor, "Font color")), widget.NewFormItem("Label size (px)", fontSize), widget.NewFormItem("Heading size (px)", headingSize), widget.NewFormItem("Line gap (px)", spacing), widget.NewFormItem("Highlight", colorField(highlightColor, "Selection highlight")))
 	controls := container.NewBorder(container.NewVBox(scope, container.NewBorder(nil, nil, nil, savePreset, preset)), nil, nil, nil, container.NewVScroll(form))
-	preview := container.NewBorder(container.NewHBox(widget.NewLabel("DVD"), discChoice, widget.NewLabel("Page"), pageChoice), status, nil, nil, picture)
+	preview := container.NewBorder(container.NewHBox(widget.NewLabel(base.DiscLabel()), discChoice, widget.NewLabel("Page"), pageChoice), status, nil, nil, picture)
 	split := container.NewHSplit(controls, preview)
 	split.Offset = .43
 	buttons := container.NewHBox(layout.NewSpacer(), widget.NewButton("Close", w.Close), defaults, applyJob)

@@ -49,13 +49,29 @@ func TestHCencSourceAndAudioSelection(t *testing.T) {
 	for _, audio := range []int{4, -1} {
 		v.AudioStream = audio
 		mux := strings.Join(HCencMuxArgs(v, s, "source", "video.m2v", "output.mpg"), " ")
-		for _, want := range []string{"-map 0:v:0", "-c:v copy", "-b:a 448k", "-ar 48000", "-ac 2", "-af apad", "-shortest", "-t 10.000000", "-f dvd", "-muxrate 10080k", "-packetsize 2048"} {
+		for _, want := range []string{"-map 0:v:0", "-c:v copy", "-bsf:v setts=pts=PTS-STARTPTS:dts=DTS-STARTPTS", "-b:a 448k", "-ar 48000", "-ac 2", "-af apad", "-shortest", "-progress pipe:1", "-f dvd", "-muxrate 10080k", "-packetsize 2048"} {
 			if !strings.Contains(mux, want) {
 				t.Fatal(want, mux)
 			}
 		}
+		if strings.Contains(mux, "-t ") {
+			t.Fatal("output duration cutoff can discard reordered video frames", mux)
+		}
 		if audio == 4 && (!strings.Contains(mux, "-map 1:4") || strings.Contains(mux, "anullsrc")) || audio == -1 && (!strings.Contains(mux, "anullsrc") || !strings.Contains(mux, "-map 1:a:0")) {
 			t.Fatal("selected audio/silence mapping changed", mux)
+		}
+	}
+}
+
+func TestHCencFrameCountRequiresCompletedOutputStatistics(t *testing.T) {
+	for _, report := range []string{"nr. of frames in source: 300\nnr. of frames: 300\n", "nr. of frames:    1\r\n"} {
+		if n, err := hcencFrameCount(report); err != nil || n < 1 {
+			t.Fatal(n, err)
+		}
+	}
+	for _, report := range []string{"nr. of frames in source: 300", "nr. of frames: 0", "nr. of frames: -1", "nr. of frames: invalid"} {
+		if _, err := hcencFrameCount(report); err == nil {
+			t.Fatal("invalid encoder completion statistics accepted", report)
 		}
 	}
 }

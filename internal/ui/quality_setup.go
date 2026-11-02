@@ -21,7 +21,7 @@ func (u *window) ensureQuality() bool {
 		if job.State == model.Complete || job.State == model.Canceled {
 			continue
 		}
-		if job.Settings.Profile() == model.ProfileQuality {
+		if !job.Settings.IsBluray() && job.Settings.Profile() == model.ProfileQuality {
 			if err := u.engine.Tools().RequireProfile(job.Settings); err != nil {
 				u.showQualitySetup()
 				return false
@@ -38,6 +38,19 @@ func (u *window) showQualitySetup() {
 // Called after media discovery/setup, so a late discovery result cannot replace
 // the downloaded encoder. Existing and explicitly selected runtimes are kept.
 func (u *window) setupQualityOnLaunch() {
+	snapshot := u.engine.Snapshot()
+	if snapshot.Settings.IsBluray() {
+		needsDVD := false
+		for _, job := range snapshot.Jobs {
+			if !job.Settings.IsBluray() && job.Settings.Profile() == model.ProfileQuality && job.State != model.Complete && job.State != model.Canceled {
+				needsDVD = true
+				break
+			}
+		}
+		if !needsDVD {
+			return
+		}
+	}
 	t := u.engine.Tools()
 	if os.Getenv("EASYDVD_HCENC") == "" && t.HCenc == "" && t.FFMS2 != "" && t.AviSynth != "" && len(u.engine.Snapshot().Busy) == 0 {
 		u.openQualitySetup(true)

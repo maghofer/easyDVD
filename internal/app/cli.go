@@ -59,9 +59,10 @@ func CLI(args []string) error {
 	work := fs.String("work", defaults.WorkDir, "Local work directory")
 	state := fs.String("state", filepath.Join(config, "queue.db"), "SQLite queue path")
 	standard := fs.String("standard", "PAL", "PAL or NTSC")
-	medium := fs.String("media", "DVD-5", "DVD-5 or DVD-9")
+	discFormat := fs.String("format", "DVD", "Disc format: DVD or Blu-ray (experimental)")
+	medium := fs.String("media", "", "DVD-5/DVD-9 or BD-25/BD-50 (defaults to the smaller disc for the chosen format)")
 	menuAspect := fs.String("menu-aspect", "4:3", "Menu aspect: 4:3 or 16:9")
-	efficient := fs.Bool("efficient", false, "Optimize disc packing")
+	_ = fs.Bool("efficient", false, "Deprecated compatibility flag; file order is always strict")
 	direct := fs.Bool("direct", false, "Read original sources directly")
 	keep := fs.Bool("keep-work", false, "Retain intermediate media")
 	thumbs := fs.Bool("thumbnails", false, "Thumbnail menus")
@@ -74,7 +75,7 @@ func CLI(args []string) error {
 	downloadFFmpeg := fs.Bool("download-ffmpeg", false, "Download and remember the recommended private FFmpeg installation")
 	downloadHCenc := fs.Bool("download-hcenc", false, "Download the pinned HCEnc encoder from its upstream supplier into easyDVD's private cache")
 	resume := fs.Bool("resume", false, "Resume saved queue")
-	workers := fs.Int("encoders", 2, "Parallel encoders (1–2)")
+	workers := fs.Int("encoders", defaults.Encoders, "Parallel encoders (0 = Auto, 1–32 = fixed)")
 	profile := fs.String("profile", model.ProfileBalanced, "Encoding profile: Balanced (ffmpeg) or Quality (hcenc); use Balanced or Quality as the value")
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -84,6 +85,21 @@ func CLI(args []string) error {
 		return nil
 	}
 	t := media.FindAuthoringTools()
+	switch strings.ToLower(strings.TrimSpace(*discFormat)) {
+	case "dvd":
+		defaults.DiscFormat = ""
+	case "blu-ray", "bluray", "bd":
+		defaults.DiscFormat = "Blu-ray"
+	default:
+		return fmt.Errorf("choose DVD or Blu-ray with -format")
+	}
+	if *medium == "" {
+		*medium = "DVD-5"
+		if defaults.IsBluray() {
+			*medium = "BD-25"
+		}
+	}
+	defaults.Media = *medium
 	if *downloadHCenc {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 		defer stop()
@@ -100,8 +116,18 @@ func CLI(args []string) error {
 	if *authoringOnly {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		b, _ := json.MarshalIndent(t.CheckAuthoring(ctx), "", "  ")
+		statuses := t.CheckAuthoring(ctx)
+		if defaults.IsBluray() {
+			statuses = []media.ToolStatus{t.CheckBluray(ctx)}
+		}
+		b, _ := json.MarshalIndent(statuses, "", "  ")
 		fmt.Println(string(b))
+		if defaults.IsBluray() {
+			if statuses[0].Error != "" {
+				return fmt.Errorf("%s", statuses[0].Error)
+			}
+			return nil
+		}
 		return t.RequireAuthoring()
 	}
 	setupCtx, stopSetup := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -138,17 +164,25 @@ func CLI(args []string) error {
 	if *tools {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
-		b, _ := json.MarshalIndent(t.Check(ctx), "", "  ")
-		fmt.Println(string(b))
-		if err := t.Require(); err != nil {
-			return err
+		statuses := t.Check(ctx)
+		if defaults.IsBluray() {
+			var needed []media.ToolStatus
+			for _, status := range statuses {
+				if status.Name == "FFmpeg" || status.Name == "FFprobe" {
+					needed = append(needed, status)
+				}
+			}
+			statuses = append(needed, t.CheckBluray(ctx))
 		}
-		return t.RequireProfile(model.Settings{EncodingProfile: *profile})
+		b, _ := json.MarshalIndent(statuses, "", "  ")
+		fmt.Println(string(b))
+		defaults.EncodingProfile = *profile
+		return t.RequireFor(ctx, defaults)
 	}
 	if *downloadFFmpeg && fs.NArg() == 0 && !*resume {
-		return t.Require()
+		return t.RequireMedia()
 	}
-	if err := t.Require(); err != nil {
+	if err := t.RequireMedia(); err != nil {
 		return err
 	}
 	if fs.NArg() == 0 && !*resume {
@@ -166,9 +200,6 @@ func CLI(args []string) error {
 	defaults.Encoders = *workers
 	defaults.EncodingProfile = *profile
 	defaults.TitlesPerPage = *perPage
-	if *efficient {
-		defaults.Packing = "Space efficiency"
-	}
 	if *thumbs {
 		defaults.Layout = "Thumbnails"
 		if *perPage == 10 {

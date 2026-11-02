@@ -97,7 +97,7 @@ func VideoFilter(v model.Video, s model.Settings) (string, bool) {
 }
 
 func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, pass int) []string {
-	args := []string{"-hide_banner", "-nostdin", "-y", "-xerror", "-err_detect", "explode", "-i", input}
+	args := append(ffmpegInputArgs(s), "-i", input)
 	if pass == 2 && v.AudioStream < 0 {
 		args = append(args, "-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo")
 	}
@@ -106,10 +106,7 @@ func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, 
 	if interlaced {
 		flags += "+ildct+ilme"
 	}
-	threads := max(1, (runtime.NumCPU()-2)/s.Encoders)
-	if threads > 8 {
-		threads = 8
-	}
+	threads := encodingThreads(s)
 	// This is the Balanced encoder. Quality is dispatched to HCEnc by Encode.
 	args = append(args, "-map", fmt.Sprintf("0:%d", v.VideoStream), "-vf", filter,
 		"-c:v", "mpeg2video", "-profile:v", "4", "-level:v", "8", "-pix_fmt", "yuv420p",
@@ -145,6 +142,9 @@ func EncodeArgs(v model.Video, s model.Settings, input, passlog, output string, 
 }
 
 func (t Tools) Encode(ctx context.Context, v model.Video, s model.Settings, input, dir string, log io.Writer, progress func(float64)) (model.Video, error) {
+	if s.IsBluray() {
+		return t.encodeBluray(ctx, v, s, input, dir, log, progress)
+	}
 	if err := t.RequireProfile(s); err != nil {
 		return v, err
 	}
@@ -206,15 +206,26 @@ func (t Tools) Encode(ctx context.Context, v model.Video, s model.Settings, inpu
 }
 
 func (t Tools) Thumbnail(ctx context.Context, v model.Video, input, path string, log io.Writer) error {
+	return t.thumbnail(ctx, v, input, path, log, 320, 240)
+}
+
+func (t Tools) ThumbnailFor(ctx context.Context, v model.Video, s model.Settings, input, path string, log io.Writer) error {
+	if s.IsBluray() {
+		return t.thumbnail(ctx, v, input, path, log, 640, 480)
+	}
+	return t.Thumbnail(ctx, v, input, path, log)
+}
+
+func (t Tools) thumbnail(ctx context.Context, v model.Video, input, path string, log io.Writer, width, height int) error {
 	seconds := math.Min(v.Duration*.25, 30)
-	w, h := 320, 240
+	w, h := width, height
 	dar := v.ContentDAR()
 	if dar >= 4.0/3 {
-		h = max(2, int(math.Round(320/dar/2))*2)
+		h = max(2, int(math.Round(float64(width)/dar/2))*2)
 	} else {
-		w = max(2, int(math.Round(240*dar/2))*2)
+		w = max(2, int(math.Round(float64(height)*dar/2))*2)
 	}
-	filter := fmt.Sprintf("scale=%d:%d:flags=lanczos,pad=320:240:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h)
+	filter := fmt.Sprintf("scale=%d:%d:flags=lanczos,pad=%d:%d:(ow-iw)/2:(oh-ih)/2,setsar=1", w, h, width, height)
 	if v.CropLeft+v.CropRight > 0 {
 		filter = fmt.Sprintf("crop=%d:%d:%d:0,", v.Width-v.CropLeft-v.CropRight, v.Height, v.CropLeft) + filter
 	}

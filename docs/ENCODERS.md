@@ -1,5 +1,8 @@
 # DVD encoding quality
 
+This page describes DVD profiles. Experimental Blu-ray uses libx264 for both
+profiles; its processing and copying rules are in [Blu-ray support](BLURAY.md).
+
 Balanced uses FFmpeg. Quality uses HCEnc 0.28 with the encoder settings from
 the supplied AVStoDVD 2.8.9 log. FFmpeg/FFprobe remain external: locate a
 compatible installation or accept the app's private download. Quality's source-built
@@ -7,9 +10,9 @@ compatible installation or accept the app's private download. Quality's source-b
 verified download through Quality setup.
 
 **Balanced is the default for new jobs.** Choose Balanced or Quality directly
-in Job settings before processing starts. The choice is saved per job; started
-jobs keep their locked profile. Default settings also offers the default for new
-jobs. CLI and benchmark accept `-profile Balanced` or `-profile Quality`.
+in the job header before processing starts. The choice is saved per job; started
+jobs keep their locked profile. Encoding presets can set defaults for new jobs.
+CLI and benchmark accept `-profile Balanced` or `-profile Quality`.
 
 | Profile | Video target / peak | Stereo AC-3 | Intended use |
 |---|---|---|---|
@@ -109,16 +112,27 @@ Lanczos/BT.601 preparation; their pixels need not match AVStoDVD exactly.
 The temporary lossless input and elementary stream are removed after each
 attempt, including cancellation/failure. Free-space checks reserve a conservative
 raw-frame bound for concurrent Quality workers; long titles can require
-substantial additional work space. HCEnc uses SMP at idle priority, with one
-or two concurrent titles according to the worker setting.
+substantial additional work space. HCEnc uses SMP at idle priority, with
+concurrent titles according to the worker setting.
 
 FFmpeg stream-copies HCEnc video and encodes the selected audio as stereo AC-3
 at **448 kbps / 48 kHz**. It pads short audio or creates silence, and muxes with
-`-f dvd -muxrate 10080k -packetsize 2048`. The source duration limits the result.
-Every encoded MPG is fully decoded and hashed before checkpoint publication.
-The new Quality cache identity invalidates old FFmpeg Quality checkpoints in
-unfinished jobs. Balanced checkpoints keep their identity. Saved jobs predating
-the profile selector retain Quality, now requiring HCEnc when encoding resumes.
+`-f dvd -muxrate 10080k -packetsize 2048`. The source duration limits lossless
+preparation; the final mux drains the complete HCEnc video to EOF. Padded audio
+follows the video with `-shortest`. An output `-t` cutoff is deliberately omitted
+because it can discard the tail of a stream-copied MPEG-2 stream. The `setts`
+bitstream filter subtracts the first video PTS from both PTS and DTS, aligning
+the first displayed frame with audio while preserving B-picture decode order.
+The encoded video bytes are unchanged.
+
+The muxed video packet count must match HCEnc's completed-frame report before
+the MPG is fully decoded, hashed and published as a checkpoint. Quality's v2
+cache identity invalidates earlier HCEnc v1 checkpoints in unfinished jobs:
+they may already have lost end frames, which remuxing cannot restore. Old
+FFmpeg Quality checkpoints are also incompatible. Balanced checkpoints keep
+their identity. Completed ISO sets are not rebuilt automatically. Saved jobs
+predating the profile selector retain Quality, requiring HCEnc on resume.
+See [the mux regression record](../validation/HCENC-MUX-2026-11-02.md).
 
 ## Balanced profile
 
@@ -143,6 +157,66 @@ and `+ildct+ilme`; other interlaced footage is deinterlaced before conversion.
 
 The [earlier FFmpeg Quality report](../validation/FFMPEG-QUALITY-2026-10-29.md)
 is historical and does not measure the current HCEnc profile.
+
+## Encoding performance
+
+**Encoding workers** offers Auto or a fixed count from 1 to 32 in application
+Settings. The next job or resume uses this global choice; active stages keep
+their current allocation. Completed encodes are reused and quality settings stay
+locked. The first migration to application-wide workers selects Auto; explicit
+choices subsequently saved in Settings persist. Encoding presets exclude workers.
+CLI uses `-encoders 0` for Auto, or e.g.
+`-encoders 4` for four workers.
+
+DVD Auto starts with approximately one worker per two logical CPUs for both profiles.
+The count is capped at 32 and at the number of titles still needing encoding.
+On Windows it also reserves 2 GiB of currently available physical memory and
+budgets 1 GiB for each worker. Unknown memory limits Auto to two workers.
+Auto reduces concurrency further if the conservative work-volume reservation
+(including concurrent Quality lossless inputs and staged originals) would not
+fit. Insufficient space even for one worker still blocks the job. Fixed worker
+counts keep the normal space checks. The job log records the resolved count.
+
+This is a resource-based starting estimate, not a measured maximum or a live
+CPU-utilization controller. Source decoding, encoder scaling, storage speed,
+SMT, other applications and the number of remaining titles affect the best
+count. Blu-ray has a separate resource policy described in [Blu-ray support](BLURAY.md).
+Benchmark the same representative files at several fixed counts when
+tuning a workstation; compare completion time rather than CPU percentage alone.
+One long remaining title still uses one encoder.
+
+Balanced retains its maximum of eight MPEG-2 encoding threads per process.
+FFmpeg input decoding and filtering, and Quality's FFV1 preparation, now use
+the same per-worker thread budget instead of each defaulting to the whole CPU.
+Quality's BEST/two-pass settings, SMP, automatic GOPs, bitrates, matrices and
+field handling are unchanged. FFMS2 still uses one decoding thread for the
+prepared FFV1 level-1 input. The
+[HCEnc 0.28 manual](https://hank315.nl/files/HC_028/HC028.pdf) documents SMP
+on/off and multiple instances, but no configurable encoder thread count.
+
+Worker selection does not change either profile's cache identity: compatible
+completed encodes are reused. Processing whole titles concurrently adds no
+extra video encoding pass or generation of lossy compression.
+
+### Chunking a single title
+
+Chunked encoding is not enabled. It would need its own validation of frame
+counts, interlaced fields, GOP references, bitrate/VBV behavior, timestamps and
+audio continuity. Independently encoding chunks changes GOP boundaries and
+two-pass bitrate allocation even with identical quality options, so it cannot
+be described as the same encode made faster.
+
+Input keyframe alignment is necessary for independently stream-copied chunks
+of many inter-frame formats, with open GOPs requiring additional care. It is
+not necessary just to begin transcoding at an exact frame: FFmpeg can
+[seek to an earlier seek point and decode/discard up to the requested position](https://ffmpeg.org/ffmpeg.html#Main-options).
+That adds decoding work, not another lossy encode. Alternatively, Quality
+already has a lossless SD intermediate that could feed frame ranges to HCEnc's
+documented `*FRAMES` command. Independent output chunks would need safe
+[GOP boundaries](https://ffmpeg.org/ffmpeg-formats.html#segment_002c-stream_005fsegment_002c-ssegment)
+and a stream-copy/remux join; audio should be encoded continuously once.
+This is a possible follow-up for single-title workloads after whole-title
+parallelism is measured.
 
 ## Automatic pillarbox removal
 

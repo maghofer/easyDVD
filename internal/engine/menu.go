@@ -13,8 +13,17 @@ import (
 	"easydvd/internal/model"
 )
 
-func (e *Engine) MenuPresets() ([]model.MenuPreset, error) { return e.store.MenuPresets() }
-func (e *Engine) SaveMenuPreset(p model.MenuPreset) error  { return e.store.SaveMenuPreset(p) }
+func (e *Engine) MenuPresets() ([]model.MenuPreset, error)         { return e.store.MenuPresets() }
+func (e *Engine) SaveMenuPreset(p model.MenuPreset) error          { return e.store.SaveMenuPreset(p) }
+func (e *Engine) DeleteMenuPreset(name string) error               { return e.store.DeleteMenuPreset(name) }
+func (e *Engine) EncodingPresets() ([]model.EncodingPreset, error) { return e.store.EncodingPresets() }
+func (e *Engine) SaveEncodingPreset(p model.EncodingPreset) error {
+	return e.store.SaveEncodingPreset(p)
+}
+func (e *Engine) DeleteEncodingPreset(name string) error { return e.store.DeleteEncodingPreset(name) }
+func (e *Engine) ApplyMenus(ids []string, style model.MenuStyle, layout string, count int) error {
+	return e.updateJobs(ids, func(s *model.Settings) { s.Menu = style; s.Layout = layout; s.TitlesPerPage = count; s.NoMenu = false }, true)
+}
 func (e *Engine) SetMenu(id string, style model.MenuStyle, layout string, count int) error {
 	s := e.Snapshot().Settings
 	if id != "" {

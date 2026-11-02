@@ -40,6 +40,11 @@ func TestDefaultSettingsAndJobOverrideScope(t *testing.T) {
 	if fields["Encoding workers"] == nil || fields["Local work folder"] == nil {
 		t.Fatal("default options were lost")
 	}
+	workers := fields["Encoding workers"].(*widget.Select)
+	if workers.Selected != "Auto" {
+		t.Fatal("Auto default not displayed")
+	}
+	workers.SetSelected("8")
 	fields["TV standard"].(*widget.Select).SetSelected("NTSC")
 	// Save a menu default while the main dialog is open; it must not be overwritten.
 	style := u.snapshot.Settings.Menu
@@ -56,24 +61,25 @@ func TestDefaultSettingsAndJobOverrideScope(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	snapshot := u.engine.Snapshot()
-	if snapshot.Settings.TitlesPerPage != 7 || snapshot.Settings.Menu.Aspect != "16:9" || snapshot.Jobs[0].Settings != original {
+	if snapshot.Settings.Encoders != 8 || snapshot.Settings.TitlesPerPage != 7 || snapshot.Settings.Menu.Aspect != "16:9" || snapshot.Jobs[0].Settings != original {
 		t.Fatal("saving defaults changed an existing job or lost menu defaults")
 	}
 	u.snapshot = snapshot
 	u.refresh()
 	u.settingsDialog(u.selected, original)
 	fields, buttons = settingsFields(u)
-	for _, name := range []string{"Encoding workers", "File allocation", "Local work folder", "Appearance", "Titles per page"} {
+	for _, name := range []string{"File allocation", "Local work folder", "Appearance", "Titles per page"} {
 		if fields[name] != nil {
 			t.Fatalf("job overrides expose default-only option %s", name)
 		}
 	}
-	for _, name := range []string{"TV standard", "Disc capacity", "Output folder", "Menu", "Encoding profile"} {
+	for _, name := range []string{"TV standard", "Disc capacity", "Output folder", "Menu", "Encoding profile", "Encoding workers"} {
 		if fields[name] == nil {
 			t.Fatalf("missing job override %s", name)
 		}
 	}
 	fields["Disc capacity"].(*widget.Select).SetSelected("DVD-9")
+	fields["Encoding workers"].(*widget.Select).SetSelected("4")
 	profile, ok := fields["Encoding profile"].(*widget.RadioGroup)
 	if !ok || profile.Selected != model.ProfileLabel(model.ProfileBalanced) {
 		t.Fatal("job settings have no encoding radio buttons")
@@ -97,7 +103,7 @@ func TestDefaultSettingsAndJobOverrideScope(t *testing.T) {
 	if job.Profile() != model.ProfileQuality || snapshot.Settings.Profile() != model.ProfileBalanced {
 		t.Fatal("job profile did not persist independently of defaults")
 	}
-	if snapshot.Settings.Media != "DVD-5" || snapshot.Settings.Standard != "NTSC" || job.Standard != "PAL" || job.TitlesPerPage != 6 || job.Menu.Font != "Monospace" || job.Encoders != original.Encoders || job.WorkDir != original.WorkDir {
+	if snapshot.Settings.Encoders != 8 || job.Encoders != 4 || snapshot.Settings.Media != "DVD-5" || snapshot.Settings.Standard != "NTSC" || job.Standard != "PAL" || job.TitlesPerPage != 6 || job.Menu.Font != "Monospace" || job.WorkDir != original.WorkDir {
 		t.Fatal("job override changed defaults, hidden options or menu changes")
 	}
 }
@@ -125,5 +131,37 @@ func TestSettingsPreview(t *testing.T) {
 		f.Close()
 		_, buttons := settingsFields(u)
 		test.Tap(buttons["Cancel"])
+	}
+}
+
+func TestPausedJobCanSelectAutoWithoutChangingSavedEncodes(t *testing.T) {
+	s := model.DefaultSettings(t.TempDir())
+	s.Encoders = 2
+	s.EncodingProfile = "" // Legacy Quality jobs must keep their saved representation.
+	j := model.Job{ID: model.ID(), State: model.Paused, Locked: true, ScanComplete: true, Settings: s,
+		Videos: []model.Video{{ID: "saved", Encoded: "saved.mpg", EncodedHash: "saved-hash", EncodingKey: s.EncodingKey()}}}
+	u := fileListFixture(t, j)
+	u.selected = j.ID
+	u.refresh()
+	if u.settings.Disabled() {
+		t.Fatal("paused worker tuning is inaccessible")
+	}
+	u.settingsDialog(j.ID, s)
+	fields, buttons := settingsFields(u)
+	if len(fields) != 1 || fields["Encoding workers"] == nil {
+		t.Fatal("paused job exposes locked encoding settings", fields)
+	}
+	fields["Encoding workers"].(*widget.Select).SetSelected("Auto")
+	test.Tap(buttons["Save settings"])
+	deadline := time.Now().Add(3 * time.Second)
+	for u.engine.Snapshot().Jobs[1].Settings.Encoders != 0 || u.win.Canvas().Overlays().Top() != nil {
+		if time.Now().After(deadline) {
+			t.Fatal("Auto worker choice was not saved")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	got := u.engine.Snapshot().Jobs[1]
+	if got.Settings.EncodingKey() != s.EncodingKey() || got.Videos[0] != j.Videos[0] || !got.Locked || got.State != model.Paused {
+		t.Fatal("worker tuning changed a saved encode or job state", got)
 	}
 }

@@ -35,6 +35,11 @@ func fakeCapabilities(ff, probe, missing string) commandOutput {
 			return out, nil
 		case "-muxers":
 			return " E dvd DVD\n E null NULL\n E image2 images\n", nil
+		case "-bsfs":
+			if missing == "setts" {
+				return "Bitstream filters:\nnot_setts\n", nil
+			}
+			return "Bitstream filters:\nsetts\n", nil
 		}
 		return "", fmt.Errorf("unexpected command")
 	}
@@ -44,7 +49,7 @@ func TestFFmpegCompatibility(t *testing.T) {
 	for _, test := range []struct {
 		ff, probe, missing string
 		ok                 bool
-	}{{"9.0.2", "9.0.2", "", true}, {"9.1", "9.1", "", true}, {"8.1", "8.1", "", false}, {"9.0.1", "9.0.1", "", false}, {"10.0", "10.0", "", false}, {"N-123", "N-123", "", false}, {"9.0.2", "9.1", "", false}, {"9.0.2", "9.0.2", "bwdif", false}} {
+	}{{"9.0.2", "9.0.2", "", true}, {"9.1", "9.1", "", true}, {"8.1", "8.1", "", false}, {"9.0.1", "9.0.1", "", false}, {"10.0", "10.0", "", false}, {"N-123", "N-123", "", false}, {"9.0.2", "9.1", "", false}, {"9.0.2", "9.0.2", "bwdif", false}, {"9.0.2", "9.0.2", "setts", false}} {
 		t.Run(test.ff+"/"+test.probe+"/"+test.missing, func(t *testing.T) {
 			got, err := validateFFmpeg(context.Background(), pair, fakeCapabilities(test.ff, test.probe, test.missing))
 			if (err == nil) != test.ok {

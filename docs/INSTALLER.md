@@ -1,7 +1,8 @@
 # Windows installer
 
 The installer is an alternative to the portable ZIP. It contains the same GUI,
-CLI, benchmark, DVD helpers, Quality support libraries and notices. FFmpeg remains
+CLI, benchmark, DVD helpers, Quality support libraries, the private experimental
+Blu-ray authoring runtime and notices. FFmpeg remains
 an explicit first-run download or external installation. After that check/setup,
 HCEnc downloads automatically from its author when missing; it is not included
 in the installer. Quality setup provides cancellation and manual retry.
@@ -81,9 +82,10 @@ exercises are still required before calling this a stable distribution channel.
 ## Updates
 
 This change supplies the installer and its silent upgrade mechanism. The update
-checker remains manual and opens the release page; startup checks, downloading,
-update authenticity verification and automatic restart are separate application
-work. An updater must finish downloading and verifying before closing easyDVD,
+checker opens the release page. Optional background startup checks announce a
+newer stable release without blocking startup; downloading, update authenticity
+verification and automatic restart remain separate application work. An updater
+must finish downloading and verifying before closing easyDVD,
 wait for all activity to stop, and invoke Setup with `/SILENT /NORESTART` and
 appropriate error handling. The installer does not promise transactional rollback
 or prevent manually installing an older version. Database migrations and recovery

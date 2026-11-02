@@ -105,6 +105,7 @@ func TestPipeline(t *testing.T) {
 			s.KeepWork = true
 			s.Encoders = 1
 			if standard == "NTSC" {
+				s.Encoders = 4 // Exercise concurrent titles in both production encoders.
 				s.Menu.Aspect = "16:9"
 				s.Layout = "Thumbnails"
 				s.StageLocally = false
@@ -174,6 +175,12 @@ func TestPipeline(t *testing.T) {
 					if e.Snapshot().Jobs[0].State != model.Paused {
 						t.Fatal("paused checkpoint was not restored")
 					}
+					resumed := e.Snapshot().Jobs[0]
+					next := resumed.Settings
+					next.Encoders = 0
+					if err := e.SetSettings(resumed.ID, next); err != nil {
+						t.Fatal("cannot select Auto for a paused queue", err)
+					}
 					e.Start()
 					defer func() {
 						after, err := os.Stat(cached.Encoded)
@@ -189,6 +196,10 @@ func TestPipeline(t *testing.T) {
 			j := snap.Jobs[0]
 			if j.State != model.Complete {
 				t.Fatal(j.Error)
+			}
+			terminal := wait(t, e, func(s engine.Snapshot) bool { return !s.Enabled && !s.Busy[j.ID] })
+			if terminal.Jobs[0].Progress != 1 || terminal.Jobs[0].ElapsedSeconds <= 0 || terminal.ActiveFiles != 0 {
+				t.Fatal("completed queue status was not finalized", terminal)
 			}
 			if profile == model.ProfileQuality {
 				log, err := os.ReadFile(e.JobLogPath(j.ID))
@@ -242,7 +253,7 @@ func TestPipeline(t *testing.T) {
 			}
 			for n := 1; n <= 3; n++ {
 				var b strings.Builder
-				args := []string{"-v", "error", "-f", "dvdvideo", "-title", fmt.Sprint(n), "-i", j.Discs[0].ISO, "-show_streams", "-show_format", "-of", "json"}
+				args := []string{"-v", "error", "-f", "dvdvideo", "-title", fmt.Sprint(n), "-i", j.Discs[0].ISO, "-count_frames", "-show_streams", "-show_format", "-of", "json"}
 				if err = process.Run(ctx, tools.FFprobe, args, process.Options{Stdout: &b}); err != nil {
 					t.Fatal(err)
 				}
@@ -257,6 +268,7 @@ func TestPipeline(t *testing.T) {
 						Rate       string `json:"r_frame_rate"`
 						BitRate    string `json:"bit_rate"`
 						SampleRate string `json:"sample_rate"`
+						Frames     string `json:"nb_read_frames"`
 					} `json:"streams"`
 					Format struct {
 						Duration string `json:"duration"`
@@ -270,6 +282,13 @@ func TestPipeline(t *testing.T) {
 				}
 				if p.Streams[0].Pixel != "yuv420p" || media.Ratio(p.Streams[0].Rate) != media.Ratio(s.FPS()) || p.Streams[1].BitRate != fmt.Sprint(s.AudioBitrate()) || p.Streams[1].SampleRate != "48000" {
 					t.Fatal("DVD profile, frame rate or audio constraints violated", b.String())
+				}
+				expectedFrames := "50"
+				if standard == "NTSC" {
+					expectedFrames = "60"
+				}
+				if profile == model.ProfileQuality && p.Streams[0].Frames != expectedFrames {
+					t.Fatal("authored title lost video frames", n, p.Streams[0].Frames, expectedFrames)
 				}
 				// dvdvideo exposes IFO properties but does not report the MPEG-2
 				// sequence profile/level; inspect the encoded title itself for these.

@@ -16,6 +16,27 @@ const BaseReserve int64 = 32 * 1024 * 1024
 const TitleReserve int64 = 256 * 1024
 const MaxTitles = 99
 
+// PlanSettings shares the packing search while budgeting the format's structure
+// and worst-case one-menu-page-per-title overhead. Final ISO size is authoritative.
+func PlanSettings(ctx context.Context, items []Item, s model.Settings, budget time.Duration) (Result, error) {
+	if !s.IsBluray() {
+		return Plan(ctx, items, s.Capacity(), false, budget)
+	}
+	reserve := int64(1 << 20)
+	if !s.NoMenu {
+		reserve = 8 << 20
+	}
+	adjusted := append([]Item(nil), items...)
+	for i := range adjusted {
+		adjusted[i].Bytes += reserve - TitleReserve
+	}
+	r, err := Plan(ctx, adjusted, s.Capacity()-(32<<20), false, budget)
+	for i := range r.Discs {
+		r.Discs[i].Bytes += 32 << 20
+	}
+	return r, err
+}
+
 // NaturalLess compares digit runs numerically without integer overflow.
 func NaturalLess(a, b string) bool {
 	aa, bb := []rune(strings.ToLower(a)), []rune(strings.ToLower(b))

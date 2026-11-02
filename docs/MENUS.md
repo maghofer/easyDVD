@@ -1,7 +1,9 @@
 # Menu settings
 
-Choose **Job settings → Menu → Edit menu**, or
-**Default settings → Menu defaults** for defaults.
+Choose **Menu → Edit menu** in the job header, or open **Menu presets** from the
+main toolbar to create, assign, update or delete saved presets and set defaults.
+Selecting multiple jobs makes the editor's **Apply to N jobs** action update that
+selection together.
 The window contains parameters and an automatic preview, with DVD and page
 selectors. It is not a freeform editor. Only the requested page is rendered;
 typing and sliders use a short debounce. Thumbnail extraction happens in the
@@ -37,8 +39,8 @@ Nothing changes until an Apply/Save action is selected. Finished output folders
 continue to contain only ISOs.
 
 Single-video jobs default to no menu, and multi-video jobs default to a menu.
-Both can be overridden in Job settings. With **No menu** selected, the menu
+Both can be overridden with **Menu / Autoplay** in the job header. With **Autoplay** selected, the menu
 editor button is disabled, and each disc plays its included videos in order
-before stopping. Uncheck **No menu** to enable the editor again.
+before stopping. Select **Menu** to enable the editor again.
 
 The CLI accepts `-menu-aspect 4:3` or `-menu-aspect 16:9`.

@@ -63,7 +63,7 @@ func (u *window) buildJobList() fyne.CanvasObject {
 	u.clear = widget.NewButtonWithIcon("Clear queue", theme.DeleteIcon(), u.clearQueue)
 	heading := container.NewBorder(nil, nil, nil, u.clear, widget.NewLabelWithStyle("Queue", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
 	selection := container.NewHBox(u.jobSelectAll, layout.NewSpacer(), u.jobSelectionCount)
-	return container.NewBorder(container.NewVBox(heading, selection), container.NewHBox(u.up, u.down, layout.NewSpacer(), u.remove), nil, nil, u.queue)
+	return container.NewBorder(container.NewVBox(heading, selection), container.NewHBox(layout.NewSpacer(), u.remove), nil, nil, u.queue)
 }
 
 func (u *window) selectAllJobs() {
@@ -72,6 +72,7 @@ func (u *window) selectAllJobs() {
 	}
 	u.win.Canvas().Focus(u.queue)
 	u.refreshJobSelection()
+	u.refreshJobHeader(u.selectedJob())
 	u.queue.Refresh()
 }
 
@@ -90,6 +91,17 @@ func (u *window) selectJobs(id string, modifiers fyne.KeyModifier) {
 		return
 	}
 	u.selected = id
+	// When Ctrl-click removes the focused job, keep the detail header on a
+	// remaining selected job so its one-job settings cannot describe another.
+	if !u.selectedJobs[id] && len(u.selectedJobs) > 0 {
+		for i, j := range u.snapshot.Jobs {
+			if u.selectedJobs[j.ID] {
+				u.selected = j.ID
+				target = i
+				break
+			}
+		}
+	}
 	u.win.Canvas().Focus(u.queue)
 	u.queue.Highlight(target)
 	u.refresh()
@@ -178,6 +190,7 @@ func jobAppearance(j model.Job) (string, fyne.ThemeColorName) {
 }
 
 type jobTile struct {
+	drag *listDrag
 	widget.BaseWidget
 	u             *window
 	id, fullTitle string
@@ -202,6 +215,47 @@ func newJobTile(u *window) *jobTile {
 
 func (r *jobTile) Tapped(*fyne.PointEvent) { r.u.selectJob(r.id) }
 
+func (r *jobTile) TappedSecondary(e *fyne.PointEvent) {
+	widget.NewPopUpMenu(r.contextMenu(), r.u.win.Canvas()).ShowAtPosition(e.AbsolutePosition)
+}
+func (r *jobTile) contextMenu() *fyne.Menu {
+	ids := r.u.headerJobIDs()
+	if !r.u.selectedJobs[r.id] {
+		r.u.selectJobs(r.id, 0)
+		ids = []string{r.id}
+	}
+	eligible := len(ids) > 0 && !r.u.snapshot.Clearing
+	for _, j := range r.u.snapshot.Jobs {
+		for _, id := range ids {
+			if j.ID == id {
+				eligible = eligible && (j.State == model.Complete || j.State == model.Blocked) && !r.u.snapshot.Busy[id]
+			}
+		}
+	}
+	item := fyne.NewMenuItem("Clear render status", func() { r.u.action(func() error { return r.u.engine.ClearRenderStatus(ids) }) })
+	item.Disabled = !eligible
+	return fyne.NewMenu("Job", item)
+}
+
+func (r *jobTile) Dragged(e *fyne.DragEvent) {
+	if r.u.snapshot.Clearing {
+		return
+	}
+	if r.drag == nil {
+		if !r.u.selectedJobs[r.id] {
+			r.u.selectJobs(r.id, 0)
+		}
+		r.drag = r.u.beginListDrag(&r.u.queue.List, len(r.u.snapshot.Jobs), true)
+	}
+	r.drag.move(e)
+}
+func (r *jobTile) DragEnd() {
+	if r.drag != nil {
+		r.drag.end()
+		r.drag = nil
+	}
+}
+
 func (r *jobTile) update(j model.Job) {
 	if r.id != j.ID {
 		r.close.hideHint()
@@ -220,12 +274,18 @@ func (r *jobTile) update(j model.Job) {
 		r.active.StrokeColor = theme.PrimaryColor()
 	}
 	r.state.Text = fmt.Sprintf("%s · %d videos", label, len(j.Videos))
+	if j.Settings.IsBluray() {
+		r.state.Text += " · BD"
+	}
 	if j.State == model.Running || j.State == model.Paused || j.State == model.Complete {
 		percent := math.Round(max(0, min(1, j.Progress)) * 100)
 		if j.State == model.Complete {
 			percent = 100
 		}
 		r.state.Text += fmt.Sprintf(" · %.0f%%", percent)
+	}
+	if j.ElapsedSeconds > 0 {
+		r.state.Text += " · " + model.DurationString(j.ElapsedSeconds)
 	}
 	r.close.OnTapped = func() { r.u.removeJobs([]string{j.ID}) }
 	enabled(r.close, !r.u.snapshot.Clearing)

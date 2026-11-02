@@ -178,14 +178,19 @@ func (u *window) editFileTitle(jobID string, v model.Video) {
 }
 
 func (u *window) showFileIssue(v model.Video) {
-	message := widget.NewLabel(v.Relative + "\n\n" + v.Error)
+	details := v.Error
+	if v.Bluray.Version > 0 {
+		details += "\n\n" + v.Bluray.VideoReason + "\n" + v.Bluray.AudioReason
+	}
+	message := widget.NewLabel(v.Relative + "\n\n" + strings.TrimSpace(details))
 	message.Wrapping = fyne.TextWrapWord
-	d := dialog.NewCustom("File needs attention", "Close", container.NewVScroll(message), u.win)
+	d := dialog.NewCustom("File details", "Close", container.NewVScroll(message), u.win)
 	d.Resize(fyne.NewSize(580, 300))
 	d.Show()
 }
 
 type fileRow struct {
+	drag *listDrag
 	widget.BaseWidget
 	u                             *window
 	id                            string
@@ -223,6 +228,25 @@ func (r *fileRow) Tapped(*fyne.PointEvent) {
 	r.u.selectFile(r.id)
 }
 
+func (r *fileRow) Dragged(e *fyne.DragEvent) {
+	if !filesEditable(r.u.selectedJob()) || r.u.snapshot.Clearing {
+		return
+	}
+	if r.drag == nil {
+		if !r.u.selectedFiles[r.id] {
+			r.u.selectFiles(r.id, 0)
+		}
+		r.drag = r.u.beginListDrag(&r.u.files.List, len(r.u.selectedJob().Videos), false)
+	}
+	r.drag.move(e)
+}
+func (r *fileRow) DragEnd() {
+	if r.drag != nil {
+		r.drag.end()
+		r.drag = nil
+	}
+}
+
 func (r *fileRow) update(j *model.Job, index int) {
 	v := j.Videos[index]
 	if r.id != v.ID {
@@ -242,14 +266,27 @@ func (r *fileRow) update(j *model.Job, index int) {
 	if v.Excluded {
 		states = append(states, "Excluded")
 	}
+	if j.Settings.IsBluray() && v.Bluray.Version > 0 {
+		if v.Bluray.CopyVideo {
+			states = append(states, "Video copied")
+		} else {
+			states = append(states, "Video encoded")
+		}
+	}
 	r.state.SetText(strings.Join(states, " · "))
 	duration := model.DurationString(v.Duration)
 	if v.Duration <= 0 {
 		duration = "—"
 	}
 	r.duration.SetText(duration)
-	if v.Error != "" {
+	if v.Error != "" || j.Settings.IsBluray() && v.Bluray.Version > 0 {
 		r.warning.Show()
+		r.warning.SetIcon(theme.InfoIcon())
+		r.warning.hint = "Show processing details"
+		if v.Error != "" {
+			r.warning.SetIcon(theme.NewWarningThemedResource(theme.WarningIcon()))
+			r.warning.hint = "Show file problem"
+		}
 	} else {
 		r.warning.Hide()
 	}

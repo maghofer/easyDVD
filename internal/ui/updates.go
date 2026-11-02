@@ -16,7 +16,7 @@ import (
 )
 
 func (u *window) updateSettings() fyne.CanvasObject {
-	status := widget.NewLabel("Checks GitHub for stable releases only when you click. No automatic checks.")
+	status := widget.NewLabel("Checks GitHub for stable releases. Startup checks run quietly in the background.")
 	status.Wrapping = fyne.TextWrapWord
 	open := widget.NewButtonWithIcon("Open release page", theme.NavigateNextIcon(), nil)
 	open.Hide()
@@ -58,4 +58,51 @@ func (u *window) updateSettings() fyne.CanvasObject {
 		}()
 	})
 	return container.NewVBox(widget.NewSeparator(), widget.NewLabel("easyDVD "+easydvd.Version()), container.NewHBox(check, open), status)
+}
+
+func (u *window) checkUpdatesOnLaunch() {
+	if !u.snapshot.Settings.AutoCheckUpdates {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		done := make(chan struct{})
+		defer close(done)
+		go func() {
+			select {
+			case <-u.closed:
+				cancel()
+			case <-done:
+			}
+		}()
+		check := u.updateCheck
+		if check == nil {
+			check = func(ctx context.Context) (release.Result, error) {
+				return release.Check(ctx, easydvd.Repository(), easydvd.Version())
+			}
+		}
+		r, err := check(ctx)
+		if err != nil || !r.Available || ctx.Err() != nil {
+			return
+		}
+		fyne.Do(func() {
+			select {
+			case <-u.closed:
+				return
+			default:
+			}
+			u.updateNotice.SetText("easyDVD " + r.Version + " is available — open release page")
+			u.updateNotice.OnTapped = func() {
+				link, err := url.Parse(r.URL)
+				if err == nil {
+					err = u.app.OpenURL(link)
+				}
+				if err != nil {
+					dialog.ShowError(err, u.win)
+				}
+			}
+			u.updateNotice.Show()
+		})
+	}()
 }

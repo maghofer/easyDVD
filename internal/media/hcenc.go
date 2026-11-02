@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"easydvd/internal/model"
@@ -90,7 +91,7 @@ func firstFile(paths ...string) string {
 }
 
 func (t Tools) RequireProfile(s model.Settings) error {
-	if s.Profile() != model.ProfileQuality {
+	if s.IsBluray() || s.Profile() != model.ProfileQuality {
 		return nil
 	}
 	if runtime.GOOS != "windows" {
@@ -220,9 +221,9 @@ func HCencINI(v model.Video, s model.Settings, interlaced bool) string {
 
 func HCencPrepareArgs(v model.Video, s model.Settings, input, output string) []string {
 	filter, _ := VideoFilter(v, s)
-	return []string{"-hide_banner", "-nostdin", "-y", "-xerror", "-err_detect", "explode", "-i", input,
+	return append(ffmpegInputArgs(s), "-i", input,
 		"-map", fmt.Sprintf("0:%d", v.VideoStream), "-vf", filter, "-an", "-sn", "-dn", "-t", fmt.Sprintf("%.6f", v.Duration),
-		"-c:v", "ffv1", "-level", "1", "-pix_fmt", "yuv420p", "-progress", "pipe:1", "-nostats", output}
+		"-c:v", "ffv1", "-level", "1", "-threads:v", fmt.Sprint(encodingThreads(s)), "-pix_fmt", "yuv420p", "-progress", "pipe:1", "-nostats", output)
 }
 
 func HCencMuxArgs(v model.Video, s model.Settings, input, video, output string) []string {
@@ -234,8 +235,29 @@ func HCencMuxArgs(v model.Video, s model.Settings, input, video, output string) 
 		args = append(args, "-err_detect", "explode", "-i", input)
 		audio = fmt.Sprintf("1:%d", v.AudioStream)
 	}
-	return append(args, "-map", "0:v:0", "-map", audio, "-c:v", "copy", "-c:a", "ac3", "-ar", "48000", "-ac", "2", "-b:a", "448k",
-		"-af", "apad", "-shortest", "-t", fmt.Sprintf("%.6f", v.Duration), "-sn", "-dn", "-f", "dvd", "-muxrate", "10080k", "-packetsize", "2048", output)
+	// The prepared video already has the intended duration. An output -t can
+	// stop stream copying before delayed/reordered MPEG-2 pictures are written.
+	// Drain it to EOF and let padded audio follow it via -shortest instead.
+	// Shift both timestamps by the first PTS, preserving B-picture decode order
+	// while aligning the first displayed video frame with the source audio.
+	return append(args, "-map", "0:v:0", "-map", audio, "-c:v", "copy", "-bsf:v", "setts=pts=PTS-STARTPTS:dts=DTS-STARTPTS",
+		"-c:a", "ac3", "-ar", "48000", "-ac", "2", "-b:a", "448k", "-af", "apad", "-shortest",
+		"-sn", "-dn", "-progress", "pipe:1", "-nostats", "-f", "dvd", "-muxrate", "10080k", "-packetsize", "2048", output)
+}
+
+func hcencFrameCount(report string) (int, error) {
+	for _, line := range strings.Split(report, "\n") {
+		name, value, ok := strings.Cut(line, ":")
+		if !ok || strings.TrimSpace(name) != "nr. of frames" {
+			continue
+		}
+		frames, err := strconv.Atoi(strings.TrimSpace(value))
+		if err == nil && frames > 0 {
+			return frames, nil
+		}
+		break
+	}
+	return 0, fmt.Errorf("HCEnc did not report a valid encoded frame count")
 }
 
 func (t Tools) encodeHCenc(ctx context.Context, v model.Video, s model.Settings, input, dir, output string, log io.Writer, progress func(float64)) error {
@@ -325,6 +347,10 @@ func (t Tools) encodeHCenc(ctx context.Context, v model.Video, s model.Settings,
 	if logErr != nil || !strings.Contains(report, "pass 2 encoding time:") || !strings.Contains(report, "bytes in bitstream:") {
 		return fmt.Errorf("HCEnc did not complete successfully: %v\n%s", logErr, hcLog)
 	}
+	frames, err := hcencFrameCount(report)
+	if err != nil {
+		return fmt.Errorf("%w\n%s", err, hcLog)
+	}
 	video := filepath.Join(work, "video.m2v")
 	if st, err := os.Stat(video); err != nil || st.Size() == 0 {
 		return fmt.Errorf("HCEnc did not produce video: %v\n%s", err, hcLog)
@@ -332,8 +358,20 @@ func (t Tools) encodeHCenc(ctx context.Context, v model.Video, s model.Settings,
 	if progress != nil {
 		progress(.9)
 	}
-	if err := process.Run(ctx, t.FFmpeg, HCencMuxArgs(v, s, input, video, output), process.Options{Log: log}); err != nil {
+	muxed := 0
+	if err := process.Run(ctx, t.FFmpeg, HCencMuxArgs(v, s, input, video, output), process.Options{Log: log, Line: func(line string) {
+		if strings.HasPrefix(line, "frame=") {
+			n, _ := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "frame=")))
+			muxed = max(muxed, n)
+		}
+	}}); err != nil {
 		return fmt.Errorf("mux HCEnc video and AC-3 audio: %w", err)
+	}
+	if log != nil {
+		fmt.Fprintf(log, "HCEnc frame preservation: %d encoded / %d muxed\n", frames, muxed)
+	}
+	if muxed != frames {
+		return fmt.Errorf("HCEnc mux frame count mismatch: encoded %d, muxed %d", frames, muxed)
 	}
 	if progress != nil {
 		progress(1)

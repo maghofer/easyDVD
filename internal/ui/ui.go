@@ -14,6 +14,7 @@ import (
 	"easydvd/internal/media"
 	"easydvd/internal/model"
 	"easydvd/internal/platform"
+	"easydvd/internal/release"
 	"easydvd/internal/store"
 
 	"fyne.io/fyne/v2"
@@ -84,6 +85,17 @@ type window struct {
 	empty                                                   *fyne.Container
 	start, pause, cancel, retry, settings, remove, up, down *widget.Button
 	closed                                                  chan struct{}
+	headerUpdating                                          bool
+	headerScope                                             *widget.Label
+	dvdButton, blurayButton                                 *formatLogoButton
+	headerMedia, headerStandard, headerPlayback             *headerButtons
+	headerStandardGroup                                     *fyne.Container
+	headerEncodingPreset, headerMenuPreset                  *widget.Select
+	headerEncodingPresets                                   []model.EncodingPreset
+	headerMenuPresets                                       []model.MenuPreset
+	editOutput, openOutput                                  *fileAction
+	updateNotice                                            *widget.Button
+	updateCheck                                             func(context.Context) (release.Result, error)
 }
 
 func ShowStartupError(err error) {
@@ -163,6 +175,7 @@ func Run() error {
 	u.refresh()
 	go u.watch()
 	u.findMediaTools()
+	u.checkUpdatesOnLaunch()
 	w.ShowAndRun()
 	return nil
 }
@@ -229,15 +242,19 @@ func (u *window) build() fyne.CanvasObject {
 	})
 	u.start.Importance = widget.HighImportance
 	u.pause = widget.NewButtonWithIcon("Pause", theme.MediaPauseIcon(), func() { u.action(func() error { u.engine.Pause(); return nil }) })
-	preferences := widget.NewButtonWithIcon("Default settings", theme.SettingsIcon(), func() { u.settingsDialog("", u.snapshot.Settings) })
+	preferences := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), u.appSettingsDialog)
+	encodingPresets := widget.NewButton("Encoding presets", u.encodingPresetsDialog)
+	menuPresets := widget.NewButton("Menu presets", u.menuPresetsDialog)
 	diagnostics := newFileAction(u, mediaToolsIcon, "Media tools")
 	diagnostics.Importance = widget.MediumImportance
 	diagnostics.OnTapped = u.diagnostics
-	controls := container.NewCenter(container.NewHBox(u.start, u.pause, preferences, diagnostics))
-	top := container.NewVBox(container.NewBorder(nil, nil, brand, controls), widget.NewSeparator())
+	controls := container.NewCenter(container.NewHBox(u.start, u.pause, preferences, encodingPresets, menuPresets, diagnostics))
+	u.updateNotice = widget.NewButton("", nil)
+	u.updateNotice.Hide()
+	top := container.NewVBox(container.NewBorder(nil, nil, brand, controls), u.updateNotice, widget.NewSeparator())
 	queue := u.buildJobList()
 	dropLabel := widget.NewLabelWithStyle("Drop folders or video files here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true})
-	sub := widget.NewLabelWithStyle("Folders include subfolders · Group files into DVD sets", fyne.TextAlignCenter, fyne.TextStyle{})
+	sub := widget.NewLabelWithStyle("Folders include subfolders · DVD and Blu-ray sets", fyne.TextAlignCenter, fyne.TextStyle{})
 	border := canvas.NewRectangle(color.Transparent)
 	border.StrokeColor = theme.DisabledColor()
 	border.StrokeWidth = 1
@@ -254,7 +271,7 @@ func (u *window) build() fyne.CanvasObject {
 	largeBorder.StrokeColor = theme.DisabledColor()
 	largeBorder.StrokeWidth = 1
 	largeBorder.CornerRadius = 5
-	largeDrop := container.NewStack(largeBorder, container.NewPadded(container.NewVBox(layout.NewSpacer(), widget.NewLabelWithStyle("Drop folders or video files here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), widget.NewLabelWithStyle("Folders include subfolders · Group files into DVD sets", fyne.TextAlignCenter, fyne.TextStyle{}), container.NewCenter(widget.NewButtonWithIcon("Add folders", theme.FolderOpenIcon(), u.addFolders)), layout.NewSpacer())))
+	largeDrop := container.NewStack(largeBorder, container.NewPadded(container.NewVBox(layout.NewSpacer(), widget.NewLabelWithStyle("Drop folders or video files here", fyne.TextAlignCenter, fyne.TextStyle{Bold: true}), widget.NewLabelWithStyle("Folders include subfolders · DVD and Blu-ray sets", fyne.TextAlignCenter, fyne.TextStyle{}), container.NewCenter(widget.NewButtonWithIcon("Add folders", theme.FolderOpenIcon(), u.addFolders)), layout.NewSpacer())))
 	u.empty = container.NewCenter(container.NewGridWrap(fyne.NewSize(510, 230), largeDrop))
 	u.dropBar = container.NewVBox(drop, widget.NewSeparator())
 	right := container.NewBorder(u.dropBar, nil, nil, nil, container.NewStack(u.empty, u.details))
@@ -324,7 +341,8 @@ func (u *window) refresh() {
 		u.empty.Hide()
 		u.details.Show()
 		u.dropBar.Show()
-		enabled(u.settings, !j.Locked && !u.snapshot.Clearing)
+		canTuneWorkers := (j.State == model.Paused || j.State == model.Blocked || j.State == model.Canceled) && !u.snapshot.Busy[j.ID]
+		enabled(u.settings, (!j.Locked || canTuneWorkers) && !u.snapshot.Clearing)
 		enabled(u.cancel, j.State != model.Complete && j.State != model.Canceled)
 		enabled(u.retry, u.mediaReady && !u.snapshot.Clearing && !u.snapshot.Busy[j.ID] && (j.State == model.Blocked || j.State == model.Paused || j.State == model.Canceled))
 	}
@@ -344,7 +362,7 @@ func (u *window) refresh() {
 			attention++
 		}
 	}
-	status := fmt.Sprintf("%d jobs · %d completed · %d failed · %d need attention", len(u.snapshot.Jobs), counts[model.Complete], failed, attention)
+	status := fmt.Sprintf("%d jobs · %d completed · %d failed · %d need attention · %d files processing in parallel", len(u.snapshot.Jobs), counts[model.Complete], failed, attention, u.snapshot.ActiveFiles)
 	if u.snapshot.Error != "" {
 		status = u.snapshot.Error
 	}
@@ -392,6 +410,7 @@ func (u *window) diagnostics() {
 		defer cancel()
 		tools := u.engine.Tools()
 		statuses := tools.Check(ctx)
+		statuses = append(statuses, tools.CheckBluray(ctx))
 		var text strings.Builder
 		for _, s := range statuses {
 			fmt.Fprintf(&text, "%s\n%s\n%s\n", s.Name, s.Path, s.Version)
@@ -400,6 +419,7 @@ func (u *window) diagnostics() {
 			}
 			text.WriteString("\n")
 		}
+		text.WriteString(tools.EncodingCommands(u.engine.Snapshot().Settings))
 		fyne.Do(func() {
 			_, view := newReadOnlyText(text.String())
 			holder.Objects = []fyne.CanvasObject{container.NewScroll(view)}

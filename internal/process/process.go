@@ -35,6 +35,7 @@ type Options struct {
 	Env    []string
 	Stdin  io.Reader
 	Stdout io.Writer
+	Stderr io.Writer
 	Log    io.Writer
 	Line   func(string)
 }
@@ -66,9 +67,15 @@ func Run(ctx context.Context, exe string, args []string, opts Options) error {
 	cmd.WaitDelay = 3 * time.Second
 	diagnostics := &tail{}
 	cmd.Stderr = diagnostics
+	if opts.Stderr != nil {
+		cmd.Stderr = io.MultiWriter(diagnostics, opts.Stderr)
+	}
 	if opts.Log != nil {
-		fmt.Fprintf(opts.Log, "\n%s %s\n", exe, strings.Join(args, " "))
+		fmt.Fprintf(opts.Log, "\n%s\n", CommandLine(exe, args))
 		cmd.Stderr = io.MultiWriter(diagnostics, opts.Log)
+		if opts.Stderr != nil {
+			cmd.Stderr = io.MultiWriter(diagnostics, opts.Log, opts.Stderr)
+		}
 	}
 	cmd.Stdout = opts.Stdout
 	var readDone chan struct{}

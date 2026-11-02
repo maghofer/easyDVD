@@ -45,3 +45,44 @@ func (s *Store) SaveMenuPreset(p model.MenuPreset) error {
 	_, err = s.db.Exec(`INSERT INTO menu_presets(name,payload) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET payload=excluded.payload`, p.Name, b)
 	return err
 }
+
+func (s *Store) DeleteMenuPreset(name string) error {
+	_, err := s.db.Exec(`DELETE FROM menu_presets WHERE name=?`, name)
+	return err
+}
+func (s *Store) EncodingPresets() ([]model.EncodingPreset, error) {
+	rows, err := s.db.Query(`SELECT payload FROM encoding_presets ORDER BY name COLLATE NOCASE`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []model.EncodingPreset
+	for rows.Next() {
+		var b []byte
+		var p model.EncodingPreset
+		if err = rows.Scan(&b); err != nil {
+			return nil, err
+		}
+		if err = json.Unmarshal(b, &p); err != nil {
+			return nil, err
+		}
+		out = append(out, p)
+	}
+	return out, rows.Err()
+}
+func (s *Store) SaveEncodingPreset(p model.EncodingPreset) error {
+	p.Name = strings.TrimSpace(p.Name)
+	if err := p.Validate(); err != nil {
+		return err
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT INTO encoding_presets(name,payload) VALUES(?,?) ON CONFLICT(name) DO UPDATE SET payload=excluded.payload`, p.Name, b)
+	return err
+}
+func (s *Store) DeleteEncodingPreset(name string) error {
+	_, err := s.db.Exec(`DELETE FROM encoding_presets WHERE name=?`, name)
+	return err
+}

@@ -76,7 +76,7 @@ func validateFFmpeg(ctx context.Context, pair FFmpegPair, run commandOutput) (FF
 	checks := []struct {
 		arg   string
 		names []string
-	}{{"-encoders", []string{"mpeg2video", "ac3", "mjpeg"}}, {"-decoders", []string{"mpeg2video", "ac3", "png"}}, {"-filters", []string{"scale", "pad", "setsar", "fps", "bwdif", "apad", "anullsrc", "crop", "bbox", "format"}}, {"-muxers", []string{"dvd", "null", "image2"}}}
+	}{{"-encoders", []string{"mpeg2video", "ac3", "mjpeg"}}, {"-decoders", []string{"mpeg2video", "ac3", "png"}}, {"-filters", []string{"scale", "pad", "setsar", "fps", "bwdif", "apad", "anullsrc", "crop", "bbox", "format"}}, {"-muxers", []string{"dvd", "null", "image2"}}, {"-bsfs", []string{"setts"}}}
 	for _, check := range checks {
 		out, e := run(ctx, pair.FFmpeg, []string{"-hide_banner", check.arg})
 		if e != nil {
@@ -85,7 +85,9 @@ func validateFFmpeg(ctx context.Context, pair FFmpegPair, run commandOutput) (FF
 		names := map[string]bool{}
 		for _, line := range strings.Split(out, "\n") {
 			f := strings.Fields(line)
-			if len(f) > 1 {
+			if check.arg == "-bsfs" && len(f) == 1 {
+				names[f[0]] = true
+			} else if len(f) > 1 {
 				for _, name := range strings.Split(f[1], ",") {
 					names[name] = true
 				}

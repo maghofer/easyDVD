@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,39 +19,44 @@ import (
 	"easydvd/internal/media"
 	"easydvd/internal/model"
 	"easydvd/internal/packing"
+	"easydvd/internal/platform"
 	"easydvd/internal/store"
 )
 
 var errPaused = errors.New("paused at stage boundary")
 
 type Snapshot struct {
-	Jobs     []model.Job
-	Settings model.Settings
-	Enabled  bool
-	Clearing bool
-	Error    string
-	Busy     map[string]bool
+	ActiveFiles int
+	Jobs        []model.Job
+	Settings    model.Settings
+	Enabled     bool
+	Clearing    bool
+	Error       string
+	Busy        map[string]bool
 }
 type Engine struct {
-	mu         sync.Mutex
-	jobs       []model.Job
-	settings   model.Settings
-	store      *store.Store
-	tools      media.Tools
-	ctx        context.Context
-	cancel     context.CancelFunc
-	wake       chan struct{}
-	Events     chan struct{}
-	enabled    bool
-	clearing   bool
-	pauses     map[string]bool
-	cancels    map[string]context.CancelFunc
-	scans      map[string]context.CancelFunc
-	scanSlots  chan struct{}
-	probeSlots chan struct{}
-	wg         sync.WaitGroup
-	lastError  string
-	dataDir    string
+	activeFiles int
+	runSince    time.Time
+	runningID   string
+	mu          sync.Mutex
+	jobs        []model.Job
+	settings    model.Settings
+	store       *store.Store
+	tools       media.Tools
+	ctx         context.Context
+	cancel      context.CancelFunc
+	wake        chan struct{}
+	Events      chan struct{}
+	enabled     bool
+	clearing    bool
+	pauses      map[string]bool
+	cancels     map[string]context.CancelFunc
+	scans       map[string]context.CancelFunc
+	scanSlots   chan struct{}
+	probeSlots  chan struct{}
+	wg          sync.WaitGroup
+	lastError   string
+	dataDir     string
 }
 
 type Option func(*Engine)
@@ -76,6 +82,11 @@ func New(st *store.Store, defaults model.Settings, t media.Tools, options ...Opt
 	}
 	for i := range e.jobs {
 		j := &e.jobs[i]
+		// Retain serialized settings on started jobs for publication recovery.
+		// Packing itself always follows source order, including legacy queues.
+		if !j.Locked {
+			j.Settings.Packing = "Strict order"
+		}
 		if len(j.ID) != 24 || strings.Trim(j.ID, "0123456789abcdef") != "" {
 			cancel()
 			return nil, fmt.Errorf("invalid saved job identifier")
@@ -125,7 +136,7 @@ func (e *Engine) index(id string) int {
 func (e *Engine) Snapshot() Snapshot {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	s := Snapshot{Settings: e.settings, Enabled: e.enabled, Clearing: e.clearing, Error: e.lastError, Busy: map[string]bool{}}
+	s := Snapshot{ActiveFiles: e.activeFiles, Settings: e.settings, Enabled: e.enabled, Clearing: e.clearing, Error: e.lastError, Busy: map[string]bool{}}
 	for id := range e.cancels {
 		s.Busy[id] = true
 	}
@@ -133,6 +144,9 @@ func (e *Engine) Snapshot() Snapshot {
 		s.Busy[id] = true
 	}
 	for _, j := range e.jobs {
+		if j.State == model.Running && j.ID == e.runningID && !e.runSince.IsZero() {
+			j.ElapsedSeconds += time.Since(e.runSince).Seconds()
+		}
 		s.Jobs = append(s.Jobs, j.Clone())
 	}
 	return s
@@ -360,6 +374,7 @@ func (e *Engine) scanLocked(id string) {
 		}
 		j := &e.jobs[i]
 		packing.SortVideos(j.Videos)
+		applyVideoOrder(j)
 		if ctx.Err() != nil {
 			if j.State != model.Canceled {
 				j.State = model.Paused
@@ -401,7 +416,7 @@ func (e *Engine) estimateLocked(j *model.Job) {
 			items = append(items, packing.Item{ID: v.ID, Bytes: v.EstimatedBytes(j.Settings), Order: i})
 		}
 	}
-	r, err := packing.Plan(context.Background(), items, j.Settings.Capacity(), j.Settings.Packing == "Space efficiency", 0)
+	r, err := packing.PlanSettings(context.Background(), items, j.Settings, 0)
 	if err == nil {
 		j.EstimatedDiscs = len(r.Discs)
 	} else {
@@ -734,6 +749,7 @@ func (e *Engine) SetJobSettings(id string, s model.Settings) error {
 }
 
 func (e *Engine) setSettings(id string, s model.Settings, explicitPlayback bool) error {
+	s.Packing = "Strict order"
 	if err := s.Validate(); err != nil {
 		return err
 	}
@@ -750,7 +766,17 @@ func (e *Engine) setSettings(id string, s model.Settings, explicitPlayback bool)
 			return fmt.Errorf("job not found")
 		}
 		if e.jobs[i].Locked {
-			return fmt.Errorf("settings were locked when this job started; add the folder again for different encoding settings")
+			previous := e.jobs[i].Settings
+			previous.Encoders = s.Encoders
+			if previous != s || explicitPlayback {
+				return fmt.Errorf("settings were locked when this job started; only the worker count can change while stopped")
+			}
+			if e.cancels[id] != nil || e.scans[id] != nil || e.clearing {
+				return fmt.Errorf("pause the job and wait for processing to stop before changing workers")
+			}
+			e.jobs[i].Settings.Encoders = s.Encoders
+			e.persistLocked()
+			return nil
 		}
 		if explicitPlayback || e.jobs[i].Settings.NoMenu != s.NoMenu {
 			mode := s.NoMenu
@@ -833,7 +859,12 @@ func (e *Engine) loop() {
 			e.jobs[i].State = model.Running
 			e.jobs[i].Locked = true
 			e.jobs[i].Error = ""
+			e.runSince, e.runningID = time.Now(), j.ID
+			elapsed := e.jobs[i].ElapsedSeconds
 			j = e.jobs[i].Clone()
+			j.Settings.Encoders = e.settings.Encoders
+			j.Settings.WorkDir = e.settings.WorkDir
+			j.Settings.StageLocally, j.Settings.KeepWork = e.settings.StageLocally, e.settings.KeepWork
 			e.persistLocked()
 			e.mu.Unlock()
 			err := e.run(ctx, j)
@@ -841,6 +872,16 @@ func (e *Engine) loop() {
 			e.mu.Lock()
 			delete(e.cancels, j.ID)
 			i = e.index(j.ID)
+			if i >= 0 {
+				e.jobs[i].ElapsedSeconds = elapsed + time.Since(e.runSince).Seconds()
+			}
+			e.runSince, e.runningID = time.Time{}, ""
+			if i >= 0 && err == nil {
+				job := &e.jobs[i]
+				job.State, job.Stage, job.Progress, job.Error = model.Complete, "Complete", 1, ""
+				now := time.Now()
+				job.Finished = &now
+			}
 			if i >= 0 && err != nil {
 				job := &e.jobs[i]
 				switch {
@@ -857,8 +898,8 @@ func (e *Engine) loop() {
 					job.Stage = "Needs attention"
 					job.Error = err.Error()
 				}
-				e.persistLocked()
 			}
+			e.persistLocked()
 			e.mu.Unlock()
 			if e.ctx.Err() != nil {
 				return
@@ -927,17 +968,12 @@ func (w *lockedWriter) Write(b []byte) (int, error) {
 	return w.w.Write(b)
 }
 
-func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) error {
-	for _, p := range []string{s.WorkDir, s.OutputDir} {
-		if err := fsops.Mkdir(ctx, p); err != nil {
-			return err
-		}
-	}
+func spaceNeeds(s model.Settings, videos []model.Video) (needWork, output int64) {
 	var remaining, stage, qualityScratch int64
 	for _, v := range videos {
 		if v.Encoded == "" {
 			remaining += v.EstimatedBytes(s)
-			if s.Profile() == model.ProfileQuality {
+			if !s.IsBluray() && s.Profile() == model.ProfileQuality {
 				qualityScratch = max(qualityScratch, media.HCencScratchBytes(v, s))
 			}
 		}
@@ -945,11 +981,11 @@ func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) err
 			stage = v.Size
 		}
 	}
-	needWork := remaining + 2*s.Capacity() + (1 << 30) + qualityScratch*int64(min(s.Encoders, len(videos)))
+	needWork = remaining + 2*s.Capacity() + (1 << 30) + qualityScratch*int64(min(s.Encoders, len(videos)))
 	if s.StageLocally {
 		needWork += stage * int64(s.Encoders+1)
 	}
-	output := remaining
+	output = remaining
 	for _, v := range videos {
 		output += v.EncodedSize
 	}
@@ -957,6 +993,50 @@ func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) err
 	if strings.EqualFold(filepath.VolumeName(s.WorkDir), filepath.VolumeName(s.OutputDir)) {
 		needWork += output
 	}
+	return needWork, output
+}
+
+// Resolve only the run's copy of settings. Saved Auto preferences and encoding
+// identities survive a resume on a different machine without invalidating video.
+func encodingWorkers(s model.Settings, videos []model.Video, cpus int, memory, free uint64) int {
+	pending := 0
+	for _, v := range videos {
+		if v.Encoded == "" {
+			pending++
+		}
+	}
+	workers := min(s.EncoderWorkers(cpus), max(1, pending))
+	if s.Encoders != 0 {
+		return workers
+	}
+	// Reserve 2 GiB for the rest of the system and budget 1 GiB per pipeline.
+	// Unknown memory falls back to two workers rather than launching many
+	// processes on a machine whose available RAM cannot be checked.
+	memoryWorkers := 2
+	if memory > 2<<30 {
+		memoryWorkers = int(min(uint64(model.MaxEncoders), (memory-(2<<30))>>30))
+	} else if memory > 0 {
+		memoryWorkers = 1
+	}
+	workers = min(workers, max(1, memoryWorkers))
+	for workers > 1 {
+		s.Encoders = workers
+		need, _ := spaceNeeds(s, videos)
+		if uint64(need) <= free {
+			break
+		}
+		workers--
+	}
+	return workers
+}
+
+func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) error {
+	for _, p := range []string{s.WorkDir, s.OutputDir} {
+		if err := fsops.Mkdir(ctx, p); err != nil {
+			return err
+		}
+	}
+	needWork, output := spaceNeeds(s, videos)
 	free, err := fsops.Free(ctx, s.WorkDir)
 	if err != nil {
 		return err
@@ -975,7 +1055,7 @@ func checkSpace(ctx context.Context, s model.Settings, videos []model.Video) err
 }
 
 func (e *Engine) run(ctx context.Context, j model.Job) error {
-	if err := e.tools.Require(); err != nil {
+	if err := e.tools.RequireFor(ctx, j.Settings); err != nil {
 		return err
 	}
 	if err := j.Settings.Validate(); err != nil {
@@ -997,6 +1077,9 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 		}
 	}
 	root := filepath.Join(j.Settings.WorkDir, "jobs", j.ID)
+	if j.RenderRevision > 0 {
+		root = filepath.Join(root, fmt.Sprintf("render-%03d", j.RenderRevision))
+	}
 	if err := os.MkdirAll(root, 0755); err != nil {
 		return err
 	}
@@ -1024,6 +1107,7 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 			current.Excluded = v.Excluded
 			v = current
 		}
+		v.Source = current.Source
 		if !media.ValidArtifact(ctx, v, j.Settings) {
 			v.Encoded = ""
 			v.EncodedHash = ""
@@ -1034,10 +1118,21 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 		videos[i] = v
 		e.updateVideo(j.ID, v, true)
 	}
-	if err = checkSpace(ctx, j.Settings, videos); err != nil {
+	freeWork, err := fsops.Free(ctx, j.Settings.WorkDir)
+	if err != nil {
 		return err
 	}
-	if err = e.encode(ctx, j, videos, root, log); err != nil {
+	encodeJob := j.Clone()
+	encodeJob.Settings.Encoders = encodingWorkers(j.Settings, videos, runtime.NumCPU(), platform.AvailableMemory(), freeWork)
+	mode := "fixed"
+	if j.Settings.Encoders == 0 {
+		mode = "Auto"
+	}
+	fmt.Fprintf(log, "Encoding workers: %d (%s; %d logical CPUs; %s)\n", encodeJob.Settings.Encoders, mode, runtime.NumCPU(), j.Settings.ProfileLabel(j.Settings.Profile()))
+	if err = checkSpace(ctx, encodeJob.Settings, videos); err != nil {
+		return err
+	}
+	if err = e.encode(ctx, encodeJob, videos, root, log); err != nil {
 		return err
 	}
 	e.mu.Lock()
@@ -1045,6 +1140,8 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 		j = e.jobs[i].Clone()
 	}
 	e.mu.Unlock()
+	j.Settings.WorkDir = encodeJob.Settings.WorkDir
+	j.Settings.StageLocally, j.Settings.KeepWork = encodeJob.Settings.StageLocally, encodeJob.Settings.KeepWork
 	videos = j.ActiveVideos()
 	if err = e.boundary(ctx, j.ID); err != nil {
 		return err
@@ -1054,7 +1151,7 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 	for i, v := range videos {
 		items = append(items, packing.Item{ID: v.ID, Bytes: v.EncodedSize, Order: i})
 	}
-	plan, err := packing.Plan(ctx, items, j.Settings.Capacity(), j.Settings.Packing == "Space efficiency", 10*time.Second)
+	plan, err := packing.PlanSettings(ctx, items, j.Settings, 10*time.Second)
 	if err != nil {
 		return err
 	}
@@ -1063,13 +1160,29 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 		if err = e.boundary(ctx, j.ID); err != nil {
 			return err
 		}
+		template := "dvd-menu-v4"
+		if j.Settings.IsBluray() {
+			template = "bluray-menu-v1-experimental-2026.11.1"
+		}
+		generationVideos := videos
+		if !j.Settings.IsBluray() {
+			// Preserve the serialized DVD generation identity used by older queues.
+			generationVideos = append([]model.Video(nil), videos...)
+			for i := range generationVideos {
+				generationVideos[i].Source = model.StreamMetadata{}
+				generationVideos[i].Bluray = model.BlurayPlan{}
+			}
+		}
+		generationSettings := j.Settings
+		generationSettings.AutoCheckUpdates = false
+		generationSettings.AppSettingsVersion = 0
 		keyBytes, _ := json.Marshal(struct {
 			Template string
 			Title    string
 			S        model.Settings
 			V        []model.Video
 			D        []model.Disc
-		}{"dvd-menu-v4", j.Title, j.Settings, videos, plan.Discs})
+		}{template, j.Title, generationSettings, generationVideos, plan.Discs})
 		generation := model.Hash(string(keyBytes))[:16]
 		genDir := filepath.Join(root, "generation-"+generation)
 		old := j.Discs
@@ -1109,7 +1222,7 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 						return err
 					}
 					e.update(j.ID, false, func(job *model.Job) {
-						job.Stage = fmt.Sprintf("%s · DVD %d of %d", stage, k+1, len(plan.Discs))
+						job.Stage = fmt.Sprintf("%s · %s %d of %d", stage, j.Settings.DiscLabel(), k+1, len(plan.Discs))
 						job.Progress = .8 + .15*float64(k)/float64(len(plan.Discs))
 					})
 					return nil
@@ -1137,16 +1250,12 @@ func (e *Engine) run(ctx context.Context, j model.Job) error {
 		}
 		if overflow >= 0 {
 			if len(plan.Discs[overflow].VideoIDs) <= 1 {
-				return fmt.Errorf("video plus DVD menus exceeds disc capacity; choose DVD-9 or exclude that video")
+				return fmt.Errorf("video plus menus exceeds disc capacity; choose a larger disc or exclude that video")
 			}
 			ids := plan.Discs[overflow].VideoIDs
 			move := ids[len(ids)-1]
 			plan.Discs[overflow].VideoIDs = ids[:len(ids)-1]
-			if j.Settings.Packing == "Strict order" {
-				plan.Discs = append(plan.Discs[:overflow+1], append([]model.Disc{{VideoIDs: []string{move}}}, plan.Discs[overflow+1:]...)...)
-			} else {
-				plan.Discs = append(plan.Discs, model.Disc{VideoIDs: []string{move}})
-			}
+			plan.Discs = append(plan.Discs[:overflow+1], append([]model.Disc{{VideoIDs: []string{move}}}, plan.Discs[overflow+1:]...)...)
 			for k := range plan.Discs {
 				d := &plan.Discs[k]
 				d.Number = k + 1
@@ -1209,7 +1318,15 @@ func (e *Engine) encode(ctx context.Context, j model.Job, videos []model.Video, 
 		go func() {
 			defer wg.Done()
 			for task := range tasks {
+				e.mu.Lock()
+				e.activeFiles++
+				e.signal()
+				e.mu.Unlock()
 				release := func() {
+					e.mu.Lock()
+					e.activeFiles--
+					e.signal()
+					e.mu.Unlock()
 					if task.staged {
 						<-stageSlots
 					}
@@ -1242,7 +1359,7 @@ func (e *Engine) encode(ctx context.Context, j model.Job, videos []model.Video, 
 				}
 				v.Thumbnail = filepath.Join(dir, "thumbnail.jpg")
 				if _, err := os.Stat(v.Thumbnail); err != nil {
-					if err = e.tools.Thumbnail(ctx, v, task.input, v.Thumbnail, log); err != nil {
+					if err = e.tools.ThumbnailFor(ctx, v, j.Settings, task.input, v.Thumbnail, log); err != nil {
 						fail(v, err)
 						release()
 						continue
@@ -1259,8 +1376,11 @@ func (e *Engine) encode(ctx context.Context, j model.Job, videos []model.Video, 
 						}
 						progressMu.Unlock()
 						e.update(j.ID, false, func(job *model.Job) {
+							if job.State != model.Running {
+								return
+							}
 							job.Stage = fmt.Sprintf("Encoding · %d of %d complete", done.Load(), len(videos))
-							job.Progress = .8 * sum / float64(len(videos))
+							job.Progress = max(job.Progress, .8*sum/float64(len(videos)))
 						})
 					})
 					if err != nil {
@@ -1361,6 +1481,9 @@ func (e *Engine) encode(ctx context.Context, j model.Job, videos []model.Video, 
 func (e *Engine) publish(ctx context.Context, j model.Job, discs []model.Disc, root, genDir string, log io.Writer) error {
 	e.update(j.ID, false, func(j *model.Job) { j.Stage = "Validating and publishing ISO set"; j.Progress = .96 })
 	name := "Set-" + model.SafeName(j.Title) + "-" + j.ID[:8]
+	if j.RenderRevision > 0 {
+		name += fmt.Sprintf("-render-%03d", j.RenderRevision)
+	}
 	dest := filepath.Join(j.Settings.OutputDir, name)
 	partial := filepath.Join(j.Settings.OutputDir, ".easydvd-"+j.ID+".partial")
 	destInfo, statErr := fsops.Stat(ctx, dest)
@@ -1378,7 +1501,7 @@ func (e *Engine) publish(ctx context.Context, j model.Job, discs []model.Disc, r
 			}
 		}
 		var saved model.Job
-		if err != nil || json.Unmarshal(b, &saved) != nil || saved.ID != j.ID || saved.Generation != j.Generation {
+		if err != nil || json.Unmarshal(b, &saved) != nil || saved.ID != j.ID || saved.Generation != j.Generation || saved.RenderRevision != j.RenderRevision {
 			return fmt.Errorf("output folder already exists: %s", dest)
 		}
 		for _, d := range saved.Discs {
@@ -1397,7 +1520,11 @@ func (e *Engine) publish(ctx context.Context, j model.Job, discs []model.Disc, r
 		return err
 	}
 	for i := range discs {
-		filename := fmt.Sprintf("DVD-%03d-of-%03d.iso", i+1, len(discs))
+		prefix := "DVD"
+		if j.Settings.IsBluray() {
+			prefix = "BD"
+		}
+		filename := fmt.Sprintf("%s-%03d-of-%03d.iso", prefix, i+1, len(discs))
 		path := filepath.Join(partial, filename)
 		if err := fsops.Copy(ctx, discs[i].ISO, path); err != nil {
 			return err
@@ -1440,6 +1567,14 @@ func (e *Engine) publish(ctx context.Context, j model.Job, discs []model.Disc, r
 	j.Error = ""
 	now := time.Now()
 	j.Finished = &now
+	e.mu.Lock()
+	if i := e.index(j.ID); i >= 0 {
+		j.ElapsedSeconds = e.jobs[i].ElapsedSeconds
+		if e.runningID == j.ID && !e.runSince.IsZero() {
+			j.ElapsedSeconds += time.Since(e.runSince).Seconds()
+		}
+	}
+	e.mu.Unlock()
 	if err = e.saveManifest(j); err != nil {
 		return err
 	}

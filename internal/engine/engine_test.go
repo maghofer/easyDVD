@@ -53,6 +53,23 @@ func TestRecoverAndLockSettings(t *testing.T) {
 	if e.SetSettings(id, next) == nil {
 		t.Fatal("started settings changed")
 	}
+	performance := settings
+	performance.Encoders = 8
+	if err := e.SetSettings(id, performance); err != nil {
+		t.Fatal("paused job cannot change workers", err)
+	}
+	if job := e.Snapshot().Jobs[0]; job.Settings.Encoders != 8 || job.Settings.EncodingKey() != settings.EncodingKey() || !job.Locked || job.State != model.Paused {
+		t.Fatal("worker tuning changed encoding identity or job state", job)
+	}
+	e.mu.Lock()
+	e.cancels[id] = func() {}
+	e.mu.Unlock()
+	if e.SetSettings(id, settings) == nil {
+		t.Fatal("workers changed before active processes stopped")
+	}
+	e.mu.Lock()
+	delete(e.cancels, id)
+	e.mu.Unlock()
 	if err = e.SetSettings("", next); err != nil {
 		t.Fatal(err)
 	}

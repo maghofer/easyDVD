@@ -16,6 +16,9 @@ dependencies retain their upstream licenses; they are separate components.
 | mkisofs 2.01-bootcd.ru-easyDVD.1 | DVD UDF/ISO mastering (GPLv2 or later) | https://sourceforge.net/projects/mkisofs-md5/files/mkisofs-md5-v2.01/ |
 | libxml2 2.15.4 | XML parsing, statically linked into helpers | https://download.gnome.org/sources/libxml2/2.15/ |
 | libpng 1.6.59 / zlib 1.3.2 | PNG highlights, statically linked into spumux | https://libpng.org/pub/png/libpng.html / https://zlib.net/ |
+| CPython 3.14.0 embedded x64 | Private Blu-ray helper runtime (PSF license and included component notices) | https://www.python.org/ |
+| bdmvkit 0.7.0, modified for easyDVD | Blu-ray HDMV navigation, interactive graphics and clip metadata (LGPL-3.0-or-later) | https://github.com/kajisho5/bdmvkit |
+| udfkit 0.1.0 | Blu-ray UDF 2.50 ISO writer (Apache-2.0) | https://github.com/kajisho5/udfkit |
 
 Exact archive checksums and binary versions are pinned in `scripts/tools.lock.json`.
 The application build uses Go 1.27.3 and WinLibs GCC 16.2.0. The helper build also
@@ -56,3 +59,13 @@ before installation. Manual retry and CLI `-download-hcenc` are also available.
 Only HCEnc and its original notices are extracted to a private user cache.
 No AVStoDVD application is installed
 or republished. See `scripts/quality-runtime/README.md`.
+
+Blu-ray dependencies are separate, replaceable Python modules under
+`tools/bluray`; no system Python is installed or configured. Original notices
+are included under `tools/bluray/licenses` and in the CPython directory. Modified
+bdmvkit source files carry an easyDVD modification notice, and the complete
+patch script accompanies them. Pinned archive hashes are in
+`scripts/bluray/lock.json`. The matching source package's `bluray` folder supplies
+the original source archives and the preparation/patch recipe. The easyDVD
+application remains MIT licensed; modifications to bdmvkit remain under its LGPL.
+The libbluray/MSYS2 reader used for validation is not included in the runtime.

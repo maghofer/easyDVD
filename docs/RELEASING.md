@@ -30,9 +30,9 @@ The manual workflow rejects a selected tag that does not match `v` plus `VERSION
 Direct `go build` reads the same VERSION but does not add the Windows icon/resource;
 use `scripts/build.ps1` for distributable executables.
 
-The update button uses GitHub's public `/releases/latest` API with a 15-second
+The update checker uses GitHub's public `/releases/latest` API with a 15-second
 timeout. It compares semantic versions, including preview-to-stable progression.
-It checks only when clicked, ignores prereleases and drafts, and handles missing
+It runs when clicked or through optional background startup checks, ignores prereleases and drafts, and handles missing
 releases, offline errors and rate limits without changing app settings. GitHub
 receives the normal request IP and easyDVD version in its User-Agent. Opening the
 release page requires a second click. Nothing is installed by the checker.
@@ -55,8 +55,9 @@ release page requires a second click. Nothing is installed by the checker.
 4. Open Actions and inspect Test and build. To obtain a package, run Build preview
    packages manually. The workflow file must first be on the default branch.
 
-The current hosted preview bundles three helper executables built from our pinned
-source recipe. DVDStyler is not required. The matching sources ZIP includes the
+The package bundles three DVD helper executables, Quality support libraries
+and a private experimental Blu-ray authoring runtime from pinned inputs.
+DVDStyler and system Python are not required. The matching sources ZIP includes the
 helper/library source archives, local changes and build instructions automatically.
 Use `-PublicRelease` to verify the corresponding-source material during packaging.
 See [the helper recipe](../scripts/toolchain/README.md) and

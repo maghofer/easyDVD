@@ -29,17 +29,30 @@ func IsVideo(path string) bool {
 }
 
 type stream struct {
-	Index       int    `json:"index"`
-	Type        string `json:"codec_type"`
-	Width       int    `json:"width"`
-	Height      int    `json:"height"`
-	DAR         string `json:"display_aspect_ratio"`
-	SAR         string `json:"sample_aspect_ratio"`
-	FPS         string `json:"avg_frame_rate"`
-	Field       string `json:"field_order"`
-	Duration    string `json:"duration"`
-	Transfer    string `json:"color_transfer"`
-	Disposition struct {
+	Codec          string `json:"codec_name"`
+	Profile        string `json:"profile"`
+	Level          int    `json:"level"`
+	PixelFormat    string `json:"pix_fmt"`
+	TimeBase       string `json:"time_base"`
+	ColorSpace     string `json:"color_space"`
+	ColorPrimaries string `json:"color_primaries"`
+	ColorRange     string `json:"color_range"`
+	SampleRate     string `json:"sample_rate"`
+	Channels       int    `json:"channels"`
+	ChannelLayout  string `json:"channel_layout"`
+	Bitrate        string `json:"bit_rate"`
+	Start          string `json:"start_time"`
+	Index          int    `json:"index"`
+	Type           string `json:"codec_type"`
+	Width          int    `json:"width"`
+	Height         int    `json:"height"`
+	DAR            string `json:"display_aspect_ratio"`
+	SAR            string `json:"sample_aspect_ratio"`
+	FPS            string `json:"avg_frame_rate"`
+	Field          string `json:"field_order"`
+	Duration       string `json:"duration"`
+	Transfer       string `json:"color_transfer"`
+	Disposition    struct {
 		Default  int `json:"default"`
 		Attached int `json:"attached_pic"`
 	} `json:"disposition"`
@@ -103,7 +116,7 @@ func (t Tools) Probe(ctx context.Context, path, relative string) (model.Video, e
 		return v, fmt.Errorf("no decodable video stream")
 	}
 	if video.Transfer == "smpte2084" || video.Transfer == "arib-std-b67" {
-		return v, fmt.Errorf("HDR footage requires an SDR conversion before DVD authoring")
+		return v, fmt.Errorf("HDR footage requires an SDR conversion before disc authoring")
 	}
 	v.VideoStream = video.Index
 	v.Width = video.Width
@@ -111,6 +124,10 @@ func (t Tools) Probe(ctx context.Context, path, relative string) (model.Video, e
 	v.DAR = Ratio(video.DAR)
 	v.FPS = Ratio(video.FPS)
 	v.FieldOrder = video.Field
+	v.Source = model.StreamMetadata{Codec: video.Codec, Profile: video.Profile, Level: video.Level,
+		PixelFormat: video.PixelFormat, FrameRate: video.FPS, TimeBase: video.TimeBase, SAR: video.SAR,
+		ColorSpace: video.ColorSpace, ColorPrimaries: video.ColorPrimaries, ColorTransfer: video.Transfer, ColorRange: video.ColorRange}
+	v.Source.VideoStart = Ratio(video.Start)
 	if v.Width <= 0 || v.Height <= 0 {
 		return v, fmt.Errorf("video dimensions are unavailable")
 	}
@@ -147,6 +164,11 @@ func (t Tools) Probe(ctx context.Context, path, relative string) (model.Video, e
 	}
 	if audio != nil {
 		v.AudioStream = audio.Index
+		v.Source.AudioCodec, v.Source.AudioLayout = audio.Codec, audio.ChannelLayout
+		v.Source.AudioChannels = audio.Channels
+		v.Source.AudioRate, _ = strconv.Atoi(audio.SampleRate)
+		v.Source.AudioBitrate, _ = strconv.Atoi(audio.Bitrate)
+		v.Source.AudioDuration, v.Source.AudioStart = Ratio(audio.Duration), Ratio(audio.Start)
 	}
 	return v, nil
 }

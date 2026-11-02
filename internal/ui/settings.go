@@ -19,9 +19,25 @@ import (
 
 func (u *window) settingsDialog(id string, s model.Settings) {
 	defaults := id == ""
+	locked := false
+	for _, job := range u.engine.Snapshot().Jobs {
+		if job.ID == id {
+			locked = job.Locked
+		}
+	}
 	standard := widget.NewSelect([]string{"PAL", "NTSC"}, nil)
 	standard.SetSelected(s.Standard)
-	medium := widget.NewSelect([]string{"DVD-5", "DVD-9"}, nil)
+	format := widget.NewSelect([]string{"DVD", "Blu-ray (experimental)"}, nil)
+	format.SetSelected("DVD")
+	if s.IsBluray() {
+		format.SetSelected("Blu-ray (experimental)")
+	}
+	mediaOptions := []string{"DVD-5", "DVD-9"}
+	if s.IsBluray() {
+		mediaOptions = []string{"BD-25", "BD-50"}
+		standard.Disable()
+	}
+	medium := widget.NewSelect(mediaOptions, nil)
 	medium.SetSelected(s.Media)
 	output := widget.NewEntry()
 	output.SetText(s.OutputDir)
@@ -37,18 +53,24 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 		})
 		return container.NewBorder(nil, nil, nil, browse, entry)
 	}
-	form := widget.NewForm(widget.NewFormItem("TV standard", standard), widget.NewFormItem("Disc capacity", medium), widget.NewFormItem("Output folder", folder(output)))
+	form := widget.NewForm(widget.NewFormItem("Disc format", format), widget.NewFormItem("TV standard", standard), widget.NewFormItem("Disc capacity", medium), widget.NewFormItem("Output folder", folder(output)))
 	menuText := "Edit menu…"
 	if defaults {
 		menuText = "Menu defaults…"
 	}
 	menuButton := widget.NewButtonWithIcon(menuText, theme.SettingsIcon(), func() { u.menuSettings(id) })
 	form.Append("Menu", menuButton)
-	packing := widget.NewSelect([]string{"Strict order", "Space efficiency"}, nil)
-	packing.SetSelected(s.Packing)
-	workers := widget.NewSelect([]string{"1", "2"}, nil)
-	workers.SetSelected(strconv.Itoa(s.Encoders))
-	profileOptions := []string{model.ProfileLabel(model.ProfileBalanced), model.ProfileLabel(model.ProfileQuality)}
+	workerOptions := []string{"Auto"}
+	for n := 1; n <= model.MaxEncoders; n++ {
+		workerOptions = append(workerOptions, strconv.Itoa(n))
+	}
+	workers := widget.NewSelect(workerOptions, nil)
+	if s.Encoders == 0 {
+		workers.SetSelected("Auto")
+	} else {
+		workers.SetSelected(strconv.Itoa(s.Encoders))
+	}
+	profileOptions := []string{s.ProfileLabel(model.ProfileBalanced), s.ProfileLabel(model.ProfileQuality)}
 	selectedProfile := s.Profile()
 	selectProfile := func(label string) {
 		for i, option := range profileOptions {
@@ -58,10 +80,55 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 		}
 	}
 	profile := widget.NewSelect(profileOptions, selectProfile)
-	profile.SetSelected(model.ProfileLabel(s.Profile()))
+	profile.SetSelected(s.ProfileLabel(s.Profile()))
 	jobProfile := widget.NewRadioGroup(profileOptions, selectProfile)
 	jobProfile.Horizontal, jobProfile.Required = true, true
-	jobProfile.SetSelected(model.ProfileLabel(s.Profile()))
+	jobProfile.SetSelected(s.ProfileLabel(s.Profile()))
+	heading := widget.NewLabel("")
+	var d dialog.Dialog
+	dialogSize := func(bluray bool) fyne.Size {
+		if defaults {
+			return fyne.NewSize(740, 640)
+		}
+		if bluray {
+			return fyne.NewSize(620, 520)
+		}
+		return fyne.NewSize(620, 460)
+	}
+	scopeNote := ""
+	formatHeading := func() {
+		text := scopeNote
+		if format.Selected == "Blu-ray (experimental)" {
+			text += "\nExperimental Blu-ray uses each source's video format. Standalone-player compatibility is unverified."
+		}
+		heading.SetText(text)
+	}
+	format.OnChanged = func(value string) {
+		chosen := s
+		chosen.DiscFormat = "DVD"
+		options := []string{"DVD-5", "DVD-9"}
+		standard.Enable()
+		if value == "Blu-ray (experimental)" {
+			chosen.DiscFormat = "Blu-ray"
+			options = []string{"BD-25", "BD-50"}
+			standard.Disable()
+		}
+		medium.SetOptions(options)
+		if medium.Selected != options[0] && medium.Selected != options[1] {
+			medium.SetSelected(options[0])
+		}
+		profileOptions = []string{chosen.ProfileLabel(model.ProfileBalanced), chosen.ProfileLabel(model.ProfileQuality)}
+		savedProfile := selectedProfile
+		profile.SetOptions(profileOptions)
+		jobProfile.Options = profileOptions
+		jobProfile.Refresh()
+		profile.SetSelected(chosen.ProfileLabel(savedProfile))
+		jobProfile.SetSelected(chosen.ProfileLabel(savedProfile))
+		formatHeading()
+		if d != nil {
+			d.Resize(dialogSize(chosen.IsBluray()))
+		}
+	}
 	work := widget.NewEntry()
 	work.SetText(s.WorkDir)
 	appearance := widget.NewSelect([]string{"System", "Light", "Dark"}, nil)
@@ -80,19 +147,23 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 	title, note, saveText := "Job settings", "Overrides for this job only. Other jobs and saved defaults stay unchanged.", "Save settings"
 	if defaults {
 		title, note, saveText = "Default settings", "Every new job starts with these settings. Existing jobs keep their own settings.", "Save as defaults"
-		form.Append("File allocation", packing)
 		form.Append("Encoding profile", profile)
 		form.Append("Encoding workers", workers)
 		form.Append("Local work folder", folder(work))
 		form.Append("Appearance", appearance)
 	} else {
 		form.Append("Encoding profile", jobProfile)
+		form.Append("Encoding workers", workers)
 		// Playback mode is part of this job's menu options.
 		form.Append("Playback", noMenu)
 	}
-	heading := widget.NewLabel(note)
+	if locked {
+		form = widget.NewForm(widget.NewFormItem("Encoding workers", workers))
+		note = "Change workers for the next resume. Completed encodes are reused; encoding quality settings stay locked."
+	}
+	scopeNote = note
+	formatHeading()
 	heading.Wrapping = fyne.TextWrapWord
-	var d dialog.Dialog
 	save := func() {
 		// Menu options can be edited in their own window while this dialog is
 		// open. Merge the fields shown here into the latest saved settings.
@@ -111,16 +182,23 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 				return
 			}
 		}
-		next.Standard, next.Media = standard.Selected, medium.Selected
-		next.OutputDir = strings.TrimSpace(output.Text)
-		if defaults {
-			next.Packing, next.EncodingProfile = packing.Selected, selectedProfile
-			next.Encoders, _ = strconv.Atoi(workers.Selected)
-			next.WorkDir, next.Theme = strings.TrimSpace(work.Text), appearance.Selected
-			next.StageLocally, next.KeepWork = stage.Checked, keep.Checked
-		} else {
-			next.NoMenu = noMenu.Checked
-			next.EncodingProfile = selectedProfile
+		next.Encoders, _ = strconv.Atoi(workers.Selected) // Auto is stored as zero.
+		if !locked {
+			if format.Selected == "Blu-ray (experimental)" {
+				next.DiscFormat = "Blu-ray"
+			} else if next.DiscFormat != "" {
+				next.DiscFormat = "DVD"
+			}
+			next.Standard, next.Media = standard.Selected, medium.Selected
+			next.OutputDir = strings.TrimSpace(output.Text)
+			if defaults {
+				next.Packing, next.EncodingProfile = "Strict order", selectedProfile
+				next.WorkDir, next.Theme = strings.TrimSpace(work.Text), appearance.Selected
+				next.StageLocally, next.KeepWork = stage.Checked, keep.Checked
+			} else {
+				next.NoMenu = noMenu.Checked
+				next.EncodingProfile = selectedProfile
+			}
 		}
 		if err := next.Validate(); err != nil {
 			dialog.ShowError(err, u.win)
@@ -163,10 +241,6 @@ func (u *window) settingsDialog(id string, s model.Settings) {
 		})}, buttons.Objects...)
 	}
 	d = dialog.NewCustomWithoutButtons(title, container.NewBorder(heading, buttons, nil, nil, container.NewVScroll(options)), u.win)
-	size := fyne.NewSize(620, 460)
-	if defaults {
-		size = fyne.NewSize(740, 640)
-	}
-	d.Resize(size)
+	d.Resize(dialogSize(s.IsBluray()))
 	d.Show()
 }

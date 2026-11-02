@@ -8,8 +8,14 @@ import (
 	"fyne.io/fyne/v2/theme"
 )
 
-//go:embed assets/logo-retro-gold.png
-var retroGoldLogo []byte
+//go:embed assets/logo-bluray-correction.png
+var headerLogo []byte
+
+//go:embed assets/dvd-logo.svg
+var dvdLogo []byte
+
+//go:embed assets/bluray-logo.svg
+var blurayLogo []byte
 
 //go:embed assets/app.png
 var appIcon []byte
@@ -22,7 +28,7 @@ var mediaToolsIcon = theme.NewThemedResource(fyne.NewStaticResource("media-tools
 func applicationIcon() fyne.Resource { return fyne.NewStaticResource("app.png", appIcon) }
 
 func newBrandLogo() *canvas.Image {
-	logo := canvas.NewImageFromResource(fyne.NewStaticResource("logo-retro-gold.png", retroGoldLogo))
+	logo := canvas.NewImageFromResource(fyne.NewStaticResource("logo-bluray-correction.png", headerLogo))
 	logo.FillMode = canvas.ImageFillContain
 	logo.SetMinSize(fyne.NewSize(192, 64))
 	return logo

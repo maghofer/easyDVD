@@ -17,6 +17,7 @@ import (
 )
 
 type Tools struct {
+	BlurayRoot                                  string
 	FFmpeg, FFprobe, DVDAuthor, Spumux, Mkisofs string
 	HCenc, FFMS2, AviSynth                      string
 	FFmpegIssue                                 string
@@ -57,6 +58,7 @@ func FindAuthoringTools() Tools {
 		return ""
 	}
 	t := Tools{DVDAuthor: find("dvdauthor"), Spumux: find("spumux"), Mkisofs: find("mkisofs")}
+	t.BlurayRoot = findBlurayRuntime()
 	t.HCenc, t.FFMS2, t.AviSynth = findHCenc()
 	return t
 }
@@ -114,6 +116,12 @@ func (t Tools) CheckAuthoring(ctx context.Context) []ToolStatus {
 	return authors
 }
 func (t Tools) Require() error {
+	if err := t.RequireMedia(); err != nil {
+		return err
+	}
+	return t.RequireAuthoring()
+}
+func (t Tools) RequireMedia() error {
 	if t.FFmpeg == "" || t.FFprobe == "" {
 		reason := t.FFmpegIssue
 		if reason == "" {
@@ -121,7 +129,7 @@ func (t Tools) Require() error {
 		}
 		return fmt.Errorf("FFmpeg setup required: %s. Use FFmpeg setup in the app, -download-ffmpeg, or EASYDVD_FFMPEG", reason)
 	}
-	return t.RequireAuthoring()
+	return nil
 }
 func (t Tools) RequireAuthoring() error {
 	for _, v := range []struct{ name, path string }{{"dvdauthor", t.DVDAuthor}, {"spumux", t.Spumux}, {"mkisofs", t.Mkisofs}} {

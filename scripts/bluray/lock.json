@@ -1,0 +1,25 @@
+{
+  "id": "experimental-2026.11.1",
+  "python": {
+    "version": "3.14.0",
+    "url": "https://www.python.org/ftp/python/3.14.0/python-3.14.0-embed-amd64.zip",
+    "sha256": "8d4d3590c10449d78aa4375f534e6d5f3027d67fdc362dd1a882279db6f90fdf",
+    "archive": "python-3.14.0-embed-amd64.zip"
+  },
+  "packages": [
+    {
+      "name": "bdmvkit",
+      "version": "0.7.0",
+      "url": "https://files.pythonhosted.org/packages/e7/5a/239811d9554c1349e1a6fd72dcd158c7d09bbdd6a354e08dbd5d804781f5/bdmvkit-0.7.0.tar.gz",
+      "sha256": "bca00efbe058a893782412a81ec7b08e181032efdcb8457ce1f0cd3df41d3997",
+      "archive": "bdmvkit-0.7.0.tar.gz"
+    },
+    {
+      "name": "udfkit",
+      "version": "0.1.0",
+      "url": "https://files.pythonhosted.org/packages/e9/54/6839ff4b0384f81f36a5e867c11a5ee108547a0e2034bb9d5d292f2ec6b0/udfkit-0.1.0.tar.gz",
+      "sha256": "335f41cb62d8d7abb042d66eb42b7720a66d06b3d2c509f9fc3e24d2ed8f0c1a",
+      "archive": "udfkit-0.1.0.tar.gz"
+    }
+  ]
+}

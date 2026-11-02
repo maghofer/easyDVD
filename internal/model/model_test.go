@@ -49,8 +49,8 @@ func TestProfilesPersistAndRetainLegacyQuality(t *testing.T) {
 	balancedEstimate := (Video{Duration: 3600}).EstimatedBytes(s)
 	s.EncodingProfile = ProfileQuality
 	qualityKey := s.EncodingKey()
-	if balancedKey != Hash("mpeg2-v2-balanced-7500-9000-rd-q2-ac3-256-2pass-PAL") || qualityKey == balancedKey || qualityKey == Hash("mpeg2-v5-quality-ceiling-ac3-448-2pass-PAL") {
-		t.Fatal("Balanced identity changed or old FFmpeg Quality identity was retained", qualityKey)
+	if balancedKey != Hash("mpeg2-v2-balanced-7500-9000-rd-q2-ac3-256-2pass-PAL") || qualityKey == balancedKey || qualityKey == Hash("mpeg2-v5-quality-ceiling-ac3-448-2pass-PAL") || qualityKey == Hash("hcenc-v1-best-8500-9000-bias80-dc10-mpeg-aq1-lum1-ac3-448-2pass-PAL") {
+		t.Fatal("Balanced identity changed or an outdated Quality identity was retained", qualityKey)
 	}
 	if (Video{Duration: 3600}).EstimatedBytes(s) <= balancedEstimate {
 		t.Fatal("profile ignored in space estimate")
@@ -102,5 +102,37 @@ func TestEncodingKeyAndSettings(t *testing.T) {
 	s.TitlesPerPage = 13
 	if s.Validate() == nil {
 		t.Fatal("illegal menu density accepted")
+	}
+}
+
+func TestWorkerSettingsAndCacheIdentity(t *testing.T) {
+	s := DefaultSettings(t.TempDir())
+	if s.Encoders != 0 {
+		t.Fatal("new defaults should use Auto")
+	}
+	for _, profile := range []string{ProfileBalanced, ProfileQuality} {
+		s.EncodingProfile = profile
+		key := s.EncodingKey()
+		for _, workers := range []int{0, 1, 2, 3, 8, MaxEncoders} {
+			s.Encoders = workers
+			if err := s.Validate(); err != nil || s.EncodingKey() != key {
+				t.Fatal("worker choice invalidated an encode or was rejected", workers, err)
+			}
+			data, err := json.Marshal(s)
+			var restored Settings
+			if err != nil || json.Unmarshal(data, &restored) != nil || restored.Encoders != workers {
+				t.Fatal("worker choice did not round trip", workers)
+			}
+		}
+		s.Encoders = 0
+		if s.EncoderWorkers(64) != MaxEncoders || s.EncoderWorkers(1) != 1 || s.EncoderWorkers(4096) != MaxEncoders {
+			t.Fatal("automatic CPU budget or worker bound lost", profile)
+		}
+	}
+	for _, workers := range []int{-1, MaxEncoders + 1} {
+		s.Encoders = workers
+		if s.Validate() == nil {
+			t.Fatal("invalid concurrency accepted", workers)
+		}
 	}
 }
