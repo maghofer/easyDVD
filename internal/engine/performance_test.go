@@ -7,6 +7,35 @@ import (
 	"easydvd/internal/model"
 )
 
+func TestBlurayScratchFollowsContentRatherThanBlankCapacity(t *testing.T) {
+	s := model.DefaultSettings(t.TempDir())
+	s.DiscFormat, s.Media, s.Encoders = "Blu-ray", "BD-25", 1
+	videos := []model.Video{{ID: "a", Duration: 2, Size: 300000}, {ID: "b", Duration: 2, Size: 300000}, {ID: "c", Duration: 2, Size: 300000}}
+	work25, output25 := spaceNeeds(s, videos)
+	if work25 > 3<<30 || output25 <= 64<<20 {
+		t.Fatal("short Blu-ray job reserves blank-disc capacity or omits structure", work25, output25)
+	}
+	s.Media = "BD-50"
+	work50, output50 := spaceNeeds(s, videos)
+	if work50 != work25 || output50 != output25 {
+		t.Fatal("unchanged short content reserves more space on larger media", work50, work25, output50, output25)
+	}
+	// Existing prepared files must still count towards both authoring copies
+	// and the final output; reducing temporary encode space cannot hide them.
+	videos[0].Encoded, videos[0].EncodedSize = "prepared.m2ts", 20_000_000_000
+	workLarge, outputLarge := spaceNeeds(s, videos)
+	if workLarge < 40_000_000_000 || outputLarge < videos[0].EncodedSize {
+		t.Fatal("prepared media lost from reservation", workLarge, outputLarge)
+	}
+	for i := range videos {
+		videos[i].Encoded, videos[i].EncodedSize = "prepared.m2ts", 20_000_000_000
+	}
+	workSet, outputSet := spaceNeeds(s, videos)
+	if workSet < 3*outputSet {
+		t.Fatal("retained multi-disc authoring or same-volume output omitted", workSet, outputSet)
+	}
+}
+
 func TestAutomaticWorkersRespectResourcesAndPendingTitles(t *testing.T) {
 	s := model.DefaultSettings(t.TempDir())
 	s.EncodingProfile = model.ProfileQuality

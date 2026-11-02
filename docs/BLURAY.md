@@ -94,6 +94,10 @@ Packing budgets 64 MiB per disc plus 8 MiB per title with menus, or 1 MiB per
 title without menus. Capacities are conservatively 25,000,000,000 and
 50,000,000,000 bytes. Final ISO size is authoritative; overflow moves whole
 titles and regenerates authoring without changing video quality.
+Workspace checks reserve the remaining prepared media, BDMV and ISO copies of the
+projected disc set with those structure reserves, staging, final output when it
+shares the work volume, and safety headroom. Short jobs do not reserve the full
+blank BD-25/BD-50 capacity. Existing DVD workspace reservations are unchanged.
 
 Encoding checkpoints include the format, versioned processing decisions and
 profile. Menu edits or capacity changes reuse prepared titles. DVD encoding and

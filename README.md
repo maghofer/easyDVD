@@ -6,12 +6,12 @@ easyDVD is a Windows app for turning folders of video files into DVD-Video and
 experimental Blu-ray ISO files with menus. Add your folders, choose your disc
 and menu settings, and let the queue process them into disc sets.
 
-Blu-ray support in 0.2.0 is experimental; standalone-player compatibility has
+Blu-ray support in 0.2.1 is experimental; standalone-player compatibility has
 not been verified.
 
 **[Download for Windows (64-bit)](https://github.com/maghofer/easyDVD/releases/latest)**
 
-The current release is **0.2.0**. Choose `easyDVD-…-win64-setup.exe`
+The current release is **0.2.1**. Choose `easyDVD-…-win64-setup.exe`
 for normal installation, or `easyDVD-…-win64.zip` for portable use. The separate
 sources ZIP is not needed to run the app.
 

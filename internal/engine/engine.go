@@ -970,26 +970,44 @@ func (w *lockedWriter) Write(b []byte) (int, error) {
 
 func spaceNeeds(s model.Settings, videos []model.Video) (needWork, output int64) {
 	var remaining, stage, qualityScratch int64
-	for _, v := range videos {
+	var items []packing.Item
+	for i, v := range videos {
+		size := v.EncodedSize
 		if v.Encoded == "" {
-			remaining += v.EstimatedBytes(s)
+			size = v.EstimatedBytes(s)
+			remaining += size
 			if !s.IsBluray() && s.Profile() == model.ProfileQuality {
 				qualityScratch = max(qualityScratch, media.HCencScratchBytes(v, s))
 			}
 		}
+		items = append(items, packing.Item{ID: v.ID, Bytes: size, Order: i})
 		if v.Size > stage {
 			stage = v.Size
 		}
-	}
-	needWork = remaining + 2*s.Capacity() + (1 << 30) + qualityScratch*int64(min(s.Encoders, len(videos)))
-	if s.StageLocally {
-		needWork += stage * int64(s.Encoders+1)
 	}
 	output = remaining
 	for _, v := range videos {
 		output += v.EncodedSize
 	}
 	output += int64(len(videos))*packing.TitleReserve + packing.BaseReserve
+	discScratch := s.Capacity()
+	if s.IsBluray() {
+		// Reserve retained BDMV and ISO copies of the projected disc set, rather
+		// than two full blank-disc capacities for even a few seconds of media.
+		// Packing includes the format's menu/structure reserves. Keep the full
+		// capacity fallback if an oversized estimate cannot be packed yet.
+		if plan, err := packing.PlanSettings(context.Background(), items, s, 0); err == nil {
+			discScratch, output = 0, 0
+			for _, disc := range plan.Discs {
+				output += disc.Bytes
+			}
+			discScratch = output
+		}
+	}
+	needWork = remaining + 2*discScratch + (1 << 30) + qualityScratch*int64(min(s.Encoders, len(videos)))
+	if s.StageLocally {
+		needWork += stage * int64(s.Encoders+1)
+	}
 	if strings.EqualFold(filepath.VolumeName(s.WorkDir), filepath.VolumeName(s.OutputDir)) {
 		needWork += output
 	}
