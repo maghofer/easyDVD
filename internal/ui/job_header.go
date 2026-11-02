@@ -55,15 +55,16 @@ func (u *window) buildJobHeader() *fyne.Container {
 	u.headerMedia = newHeaderButtons([]string{"DVD-5", "DVD-9"}, func(v string) { u.patchSelected(func(s *model.Settings) { s.Media = v }) })
 	u.headerStandard = newHeaderButtons([]string{"PAL", "NTSC"}, func(v string) { u.patchSelected(func(s *model.Settings) { s.Standard = v }) })
 	u.headerPlayback = newHeaderButtons([]string{"Menu", "Autoplay"}, func(v string) { u.patchPlayback(v == "Autoplay") })
-	u.headerEncodingPreset = widget.NewSelect(nil, u.chooseHeaderEncodingPreset)
+	u.headerEncoding = newHeaderButtons([]string{model.ProfileBalanced, model.ProfileQuality}, func(v string) {
+		u.patchSelected(func(s *model.Settings) { s.EncodingProfile = v })
+	})
 	u.headerMenuPreset = widget.NewSelect(nil, u.chooseHeaderMenuPreset)
 	u.loadHeaderPresets()
 	formats := container.NewCenter(container.NewHBox(u.dvdButton, u.blurayButton))
 	body := container.NewBorder(nil, nil, nil, formats, info)
 	u.headerStandardGroup = container.NewHBox(widget.NewSeparator(), u.headerStandard)
-	choices := container.NewHBox(u.headerMedia, u.headerStandardGroup, widget.NewSeparator(), u.headerPlayback)
-	presets := container.NewGridWithColumns(2, u.headerEncodingPreset, u.headerMenuPreset)
-	settingsRow := container.NewBorder(nil, nil, choices, nil, presets)
+	choices := container.NewHBox(u.headerMedia, u.headerStandardGroup, widget.NewSeparator(), u.headerPlayback, widget.NewSeparator(), u.headerEncoding)
+	settingsRow := container.NewBorder(nil, nil, choices, nil, u.headerMenuPreset)
 	u.jobHeader = container.NewVBox(body, container.NewThemeOverride(settingsRow, headerControlsTheme{headerTextTheme{size: 13}}), widget.NewSeparator())
 	return u.jobHeader
 }

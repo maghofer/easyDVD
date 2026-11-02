@@ -6,12 +6,12 @@ easyDVD is a Windows app for turning folders of video files into DVD-Video and
 experimental Blu-ray ISO files with menus. Add your folders, choose your disc
 and menu settings, and let the queue process them into disc sets.
 
-Blu-ray support in 0.2.1 is experimental; standalone-player compatibility has
+Blu-ray support in 0.2.2 is experimental; standalone-player compatibility has
 not been verified.
 
 **[Download for Windows (64-bit)](https://github.com/maghofer/easyDVD/releases/latest)**
 
-The current release is **0.2.1**. Choose `easyDVD-…-win64-setup.exe`
+The current release is **0.2.2**. Choose `easyDVD-…-win64-setup.exe`
 for normal installation, or `easyDVD-…-win64.zip` for portable use. The separate
 sources ZIP is not needed to run the app.
 
@@ -72,15 +72,17 @@ shared menu editor for the selected jobs.
 
 **Settings** contains application options: workers (Auto by default), temporary
 work folder, appearance, staging, retained work, logs and updates. Worker choices
-apply to the next job or resume. **Encoding presets** and **Menu presets** save
-reusable job settings, assign them to selected jobs, or set defaults for new jobs.
-Encoding presets contain disc format, capacity, TV standard and quality profile;
-workers remain application-wide. Startup checks run in the background and only
+apply to the next job or resume. **Balanced** and **Quality** buttons in the job
+header choose the encoding profile for selected jobs. **Menu presets** save reusable
+menu settings, assign them to selected jobs, or set defaults for new jobs.
+Encoding preset support is retained internally for future use, with no UI entry point.
+Startup checks run in the background and only
 show a notice when a newer stable release exists. Disable them in Settings.
 
 Job tiles show status and completion percentage. Click a tile to select it;
 Ctrl-click toggles additional jobs and Shift-click selects a
-range. Files use the same selection behavior. Use **Remove selected** or **Delete**.
+range. Files use the same selection behavior. Press **Delete** to remove selected
+jobs; **Clear queue** at the bottom removes the entire queue after confirmation.
 The X on a tile removes that job. Removing active jobs asks to stop them first;
 source and output files are kept. Drag selected files or jobs up/down to reorder
 them. Whole titles always follow strict file order across discs. Queue tiles also

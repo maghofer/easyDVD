@@ -30,8 +30,15 @@ import (
 type professionalTheme struct{}
 
 func (professionalTheme) Color(name fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
-	if name == theme.ColorNamePrimary {
-		return color.NRGBA{R: 83, G: 138, B: 198, A: 255}
+	switch name {
+	case theme.ColorNamePrimary, theme.ColorNameHyperlink:
+		return color.NRGBA{R: 212, G: 160, B: 32, A: 255}
+	case theme.ColorNameFocus:
+		return color.NRGBA{R: 212, G: 160, B: 32, A: 90}
+	case theme.ColorNameSelection:
+		return color.NRGBA{R: 212, G: 160, B: 32, A: 65}
+	case theme.ColorNameForegroundOnPrimary:
+		return color.NRGBA{R: 30, G: 26, B: 16, A: 255}
 	}
 	return theme.DefaultTheme().Color(name, v)
 }
@@ -49,53 +56,52 @@ func (professionalTheme) Size(name fyne.ThemeSizeName) float32 {
 }
 
 type window struct {
-	mediaReady                                              bool
-	mediaChecking                                           bool
-	mediaIssue                                              string
-	mediaDialog                                             dialog.Dialog
-	qualityDialog                                           dialog.Dialog
-	dropBar                                                 *fyne.Container
-	app                                                     fyne.App
-	win                                                     fyne.Window
-	engine                                                  *engine.Engine
-	snapshot                                                engine.Snapshot
-	selected                                                string
-	selectionJob                                            string
-	selectionAnchor                                         string
-	selectedFiles                                           map[string]bool
-	selectedJobs                                            map[string]bool
-	jobSelectionAnchor                                      string
-	jobSelectAll                                            *widget.Button
-	jobSelectionCount                                       *widget.Label
-	fileHints                                               *fyne.Container
-	selectAll                                               *widget.Button
-	selectionCount                                          *widget.Label
-	excludeSelected, includeSelected                        *widget.Button
-	queue                                                   *jobList
-	files                                                   *fileList
-	title, status, source                                   *widget.Label
-	queueProgress                                           *thinProgress
-	queuePosition, queuePercent                             *widget.Label
-	footerProgress                                          *fyne.Container
-	jobHeader                                               *fyne.Container
-	jobSummary, jobOutput                                   *widget.Label
-	jobWarning, clear                                       *widget.Button
-	renameJob                                               *fileAction
-	details                                                 *fyne.Container
-	empty                                                   *fyne.Container
-	start, pause, cancel, retry, settings, remove, up, down *widget.Button
-	closed                                                  chan struct{}
-	headerUpdating                                          bool
-	headerScope                                             *widget.Label
-	dvdButton, blurayButton                                 *formatLogoButton
-	headerMedia, headerStandard, headerPlayback             *headerButtons
-	headerStandardGroup                                     *fyne.Container
-	headerEncodingPreset, headerMenuPreset                  *widget.Select
-	headerEncodingPresets                                   []model.EncodingPreset
-	headerMenuPresets                                       []model.MenuPreset
-	editOutput, openOutput                                  *fileAction
-	updateNotice                                            *widget.Button
-	updateCheck                                             func(context.Context) (release.Result, error)
+	mediaReady                                                  bool
+	mediaChecking                                               bool
+	mediaIssue                                                  string
+	mediaDialog                                                 dialog.Dialog
+	qualityDialog                                               dialog.Dialog
+	dropBar                                                     *fyne.Container
+	app                                                         fyne.App
+	win                                                         fyne.Window
+	engine                                                      *engine.Engine
+	snapshot                                                    engine.Snapshot
+	selected                                                    string
+	selectionJob                                                string
+	selectionAnchor                                             string
+	selectedFiles                                               map[string]bool
+	selectedJobs                                                map[string]bool
+	jobSelectionAnchor                                          string
+	jobSelectAll                                                *widget.Button
+	jobSelectionCount                                           *widget.Label
+	fileHints                                                   *fyne.Container
+	selectAll                                                   *widget.Button
+	selectionCount                                              *widget.Label
+	excludeSelected, includeSelected                            *widget.Button
+	queue                                                       *jobList
+	files                                                       *fileList
+	title, status, source                                       *widget.Label
+	queueProgress                                               *thinProgress
+	queuePosition, queuePercent                                 *widget.Label
+	footerProgress                                              *fyne.Container
+	jobHeader                                                   *fyne.Container
+	jobSummary, jobOutput                                       *widget.Label
+	jobWarning, clear                                           *widget.Button
+	renameJob                                                   *fileAction
+	details                                                     *fyne.Container
+	empty                                                       *fyne.Container
+	start, pause, cancel, retry, settings, up, down             *widget.Button
+	closed                                                      chan struct{}
+	headerUpdating                                              bool
+	headerScope                                                 *widget.Label
+	dvdButton, blurayButton                                     *formatLogoButton
+	headerMedia, headerStandard, headerPlayback, headerEncoding *headerButtons
+	headerStandardGroup                                         *fyne.Container
+	headerMenuPreset                                            *widget.Select
+	headerMenuPresets                                           []model.MenuPreset
+	editOutput, openOutput                                      *fileAction
+	updateNotice                                                *widget.Button
+	updateCheck                                                 func(context.Context) (release.Result, error)
 }
 
 func ShowStartupError(err error) {
@@ -243,12 +249,11 @@ func (u *window) build() fyne.CanvasObject {
 	u.start.Importance = widget.HighImportance
 	u.pause = widget.NewButtonWithIcon("Pause", theme.MediaPauseIcon(), func() { u.action(func() error { u.engine.Pause(); return nil }) })
 	preferences := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), u.appSettingsDialog)
-	encodingPresets := widget.NewButton("Encoding presets", u.encodingPresetsDialog)
 	menuPresets := widget.NewButton("Menu presets", u.menuPresetsDialog)
 	diagnostics := newFileAction(u, mediaToolsIcon, "Media tools")
 	diagnostics.Importance = widget.MediumImportance
 	diagnostics.OnTapped = u.diagnostics
-	controls := container.NewCenter(container.NewHBox(u.start, u.pause, preferences, encodingPresets, menuPresets, diagnostics))
+	controls := container.NewCenter(container.NewHBox(u.start, u.pause, preferences, menuPresets, diagnostics))
 	u.updateNotice = widget.NewButton("", nil)
 	u.updateNotice.Hide()
 	top := container.NewVBox(container.NewBorder(nil, nil, brand, controls), u.updateNotice, widget.NewSeparator())

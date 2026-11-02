@@ -59,11 +59,10 @@ func (u *window) buildJobList() fyne.CanvasObject {
 	u.jobSelectionCount = widget.NewLabel("0 selected")
 	u.up = widget.NewButtonWithIcon("", theme.MoveUpIcon(), func() { id := u.selected; u.action(func() error { u.engine.Move(id, -1); return nil }) })
 	u.down = widget.NewButtonWithIcon("", theme.MoveDownIcon(), func() { id := u.selected; u.action(func() error { u.engine.Move(id, 1); return nil }) })
-	u.remove = widget.NewButtonWithIcon("Remove selected", theme.DeleteIcon(), u.removeSelectedJobs)
 	u.clear = widget.NewButtonWithIcon("Clear queue", theme.DeleteIcon(), u.clearQueue)
-	heading := container.NewBorder(nil, nil, nil, u.clear, widget.NewLabelWithStyle("Queue", fyne.TextAlignLeading, fyne.TextStyle{Bold: true}))
+	heading := widget.NewLabelWithStyle("Queue", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
 	selection := container.NewHBox(u.jobSelectAll, layout.NewSpacer(), u.jobSelectionCount)
-	return container.NewBorder(container.NewVBox(heading, selection), container.NewHBox(layout.NewSpacer(), u.remove), nil, nil, u.queue)
+	return container.NewBorder(container.NewVBox(heading, selection), container.NewHBox(layout.NewSpacer(), u.clear), nil, nil, u.queue)
 }
 
 func (u *window) selectAllJobs() {
@@ -123,7 +122,6 @@ func (u *window) refreshJobSelection() {
 	count := len(u.selectedJobs)
 	u.jobSelectionCount.SetText(fmt.Sprintf("%d selected", count))
 	enabled(u.jobSelectAll, len(u.snapshot.Jobs) > 0 && !u.snapshot.Clearing)
-	enabled(u.remove, count > 0 && !u.snapshot.Clearing)
 }
 
 func (u *window) removeSelectedJobs() {

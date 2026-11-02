@@ -51,8 +51,21 @@ func TestJobHeaderHasFixedCompactInformation(t *testing.T) {
 			t.Fatal("job status is repeated in the header")
 		}
 	})
-	if dropdowns != 2 {
-		t.Fatalf("header has %d dropdowns; want only encoding and menu presets", dropdowns)
+	if dropdowns != 1 {
+		t.Fatalf("header has %d dropdowns; want only menu presets", dropdowns)
+	}
+	walkFileTestObjects(u.win.Content(), func(object fyne.CanvasObject) {
+		if b, ok := object.(*widget.Button); ok && (b.Text == "Encoding presets" || b.Text == "Remove selected") {
+			t.Fatal("disconnected control is still visible", b.Text)
+		}
+	})
+	if u.headerEncoding.buttons[0].Text != "Balanced" || u.headerEncoding.buttons[1].Text != "Quality" {
+		t.Fatal("encoding choices do not use the simple profile labels")
+	}
+	clearPos := u.app.Driver().AbsolutePositionForObject(u.clear)
+	queuePos := u.app.Driver().AbsolutePositionForObject(u.queue)
+	if clearPos.Y < queuePos.Y+u.queue.Size().Height {
+		t.Fatal("clear queue is not below the job list")
 	}
 	if u.jobOutput.TextStyle.Underline {
 		t.Fatal("output path is still underlined")
@@ -69,7 +82,7 @@ func TestJobHeaderHasFixedCompactInformation(t *testing.T) {
 	if !openOutput {
 		t.Fatal("output action has no tooltip or is not icon-only")
 	}
-	if !u.dvdButton.Visible() || !u.headerEncodingPreset.Visible() || !u.headerMedia.Visible() {
+	if !u.dvdButton.Visible() || !u.headerEncoding.Visible() || !u.headerMedia.Visible() {
 		t.Fatal("inline job settings missing")
 	}
 	if !u.jobWarning.Visible() || u.jobWarning.Text != "1 file issue" {

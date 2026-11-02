@@ -12,6 +12,7 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// Retained for future custom presets; deliberately disconnected from the UI.
 func (u *window) encodingPresetsDialog() {
 	ids := u.headerJobIDs()
 	presets, err := u.engine.EncodingPresets()

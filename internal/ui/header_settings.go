@@ -116,12 +116,11 @@ func (u *window) refreshHeaderSettings() {
 		}
 		return "Menu"
 	}))
-	u.refreshHeaderPresetOptions(first, mixedFormat)
-	u.headerEncodingPreset.PlaceHolder = "Encoding: mixed / custom"
-	set(u.headerEncodingPreset, common(u.encodingPresetName))
+	u.refreshHeaderPresetOptions()
+	u.headerEncoding.SetSelected(common(func(s model.Settings) string { return s.Profile() }))
 	u.headerMenuPreset.PlaceHolder = "Menu: mixed / custom"
 	set(u.headerMenuPreset, common(u.menuPresetName))
-	for _, w := range []fyne.Disableable{u.dvdButton, u.blurayButton, u.headerMedia, u.headerStandard, u.headerPlayback, u.headerEncodingPreset, u.headerMenuPreset, u.editOutput} {
+	for _, w := range []fyne.Disableable{u.dvdButton, u.blurayButton, u.headerMedia, u.headerStandard, u.headerPlayback, u.headerEncoding, u.headerMenuPreset, u.editOutput} {
 		enabled(w, editable)
 	}
 	u.headerMedia.Disable()
@@ -179,41 +178,18 @@ func (u *window) loadHeaderPresets() {
 	if u.engine == nil {
 		return
 	}
-	encoding, err := u.engine.EncodingPresets()
-	if err == nil {
-		u.headerEncodingPresets = encoding
-	}
 	menus, err := u.engine.MenuPresets()
 	if err == nil {
 		u.headerMenuPresets = menus
 	}
 }
 
-func (u *window) refreshHeaderPresetOptions(s model.Settings, mixedFormat bool) {
-	encoding := []string{s.ProfileLabel(model.ProfileBalanced), s.ProfileLabel(model.ProfileQuality)}
-	if mixedFormat {
-		encoding = []string{model.ProfileLabel(model.ProfileBalanced), model.ProfileLabel(model.ProfileQuality)}
-	}
-	for _, preset := range u.headerEncodingPresets {
-		encoding = append(encoding, "Preset: "+preset.Name)
-	}
-	u.headerEncodingPreset.SetOptions(encoding)
+func (u *window) refreshHeaderPresetOptions() {
 	menus := []string{"Default menu"}
 	for _, preset := range u.headerMenuPresets {
 		menus = append(menus, "Preset: "+preset.Name)
 	}
 	u.headerMenuPreset.SetOptions(menus)
-}
-
-func (u *window) encodingPresetName(s model.Settings) string {
-	for _, p := range u.headerEncodingPresets {
-		preset := s
-		p.Apply(&preset)
-		if preset.Format() == s.Format() && preset.Media == s.Media && preset.Standard == s.Standard && preset.Profile() == s.Profile() {
-			return "Preset: " + p.Name
-		}
-	}
-	return s.ProfileLabel(s.Profile())
 }
 
 func (u *window) menuPresetName(s model.Settings) string {
@@ -227,24 +203,6 @@ func (u *window) menuPresetName(s model.Settings) string {
 		return "Default menu"
 	}
 	return ""
-}
-
-func (u *window) chooseHeaderEncodingPreset(name string) {
-	if u.headerUpdating {
-		return
-	}
-	for _, p := range u.headerEncodingPresets {
-		if name == "Preset: "+p.Name {
-			u.patchSelected(p.Apply)
-			return
-		}
-	}
-	for _, profile := range []string{model.ProfileBalanced, model.ProfileQuality} {
-		if name == model.ProfileLabel(profile) || name == (model.Settings{DiscFormat: "Blu-ray"}).ProfileLabel(profile) {
-			u.patchSelected(func(s *model.Settings) { s.EncodingProfile = profile })
-			return
-		}
-	}
 }
 
 func (u *window) chooseHeaderMenuPreset(name string) {

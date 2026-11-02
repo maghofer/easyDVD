@@ -1,7 +1,7 @@
 # Blu-ray (experimental)
 
-Click **Blu-ray** in the job header and choose BD-25 or BD-50. Encoding presets
-can select Blu-ray for future jobs. Each folder remains
+Click **Blu-ray** in the job header and choose BD-25 or BD-50. Choose **Balanced**
+or **Quality** using the adjacent buttons. Each folder remains
 its own set, with whole videos distributed across discs. Finished sets contain
 `BD-001-of-001.iso` style filenames. Burning remains external.
 

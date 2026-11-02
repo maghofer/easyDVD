@@ -51,8 +51,8 @@ func TestJobSelectionRangesAndDelete(t *testing.T) {
 		t.Fatal("Ctrl-click discarded previous selection")
 	}
 	u.selectJobs(jobs[0].ID, fyne.KeyModifierControl)
-	if len(u.selectedJobs) != 3 || u.remove.Disabled() || u.remove.Text != "Remove selected" {
-		t.Fatal("job toggling or bulk removal control is incorrect")
+	if len(u.selectedJobs) != 3 {
+		t.Fatal("job toggling is incorrect")
 	}
 	if u.win.Canvas().Focused() != u.queue {
 		t.Fatal("job click did not focus the queue for keyboard actions")
@@ -66,9 +66,9 @@ func TestJobSelectionRangesAndDelete(t *testing.T) {
 	if len(u.selectedJobs) != 2 {
 		t.Fatal("Select all missed queued jobs")
 	}
-	test.Tap(u.remove)
+	u.win.Canvas().Focused().TypedKey(&fyne.KeyEvent{Name: fyne.KeyDelete})
 	waitForJobCount(t, u, 0)
-	if !u.empty.Visible() || !u.remove.Disabled() {
+	if !u.empty.Visible() || !u.clear.Disabled() {
 		t.Fatal("removing all selected jobs did not restore the empty state")
 	}
 }

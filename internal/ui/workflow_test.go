@@ -29,7 +29,7 @@ func TestInlineBatchHeaderEditsOneFieldForEverySelectedJob(t *testing.T) {
 	u.snapshot = u.engine.Snapshot()
 	u.selectJobs(ids[0], 0)
 	u.selectJobs(ids[1], fyne.KeyModifierControl)
-	if u.headerScope.Text != "Editing 2 jobs" || !u.headerScope.Visible() || u.headerEncodingPreset.Selected != "" || u.headerStandard.Selected != "" {
+	if u.headerScope.Text != "Editing 2 jobs" || !u.headerScope.Visible() || u.headerEncoding.Selected != "" || u.headerStandard.Selected != "" {
 		t.Fatal("mixed batch scope missing")
 	}
 	test.Tap(u.headerMedia.buttons[1])
@@ -62,7 +62,7 @@ func TestInlineBatchHeaderEditsOneFieldForEverySelectedJob(t *testing.T) {
 	}
 }
 
-func TestHeaderPresetChoicesApplyToSelectionAndRespectPlayback(t *testing.T) {
+func TestHeaderProfileButtonsAndMenuPresetsApplyToSelectionAndRespectPlayback(t *testing.T) {
 	u := jobFixture(t)
 	ids := []string{u.snapshot.Jobs[0].ID, u.snapshot.Jobs[1].ID}
 	preset := model.EncodingPreset{Name: "Archive DVD", DiscFormat: "DVD", Standard: "NTSC", Media: "DVD-9", EncodingProfile: model.ProfileQuality}
@@ -78,7 +78,7 @@ func TestHeaderPresetChoicesApplyToSelectionAndRespectPlayback(t *testing.T) {
 	u.loadHeaderPresets()
 	u.selectJobs(ids[0], 0)
 	u.selectJobs(ids[1], fyne.KeyModifierControl)
-	u.headerEncodingPreset.SetSelected("Preset: Archive DVD")
+	test.Tap(u.headerEncoding.buttons[1])
 	wait := func(check func([]model.Job) bool) {
 		t.Helper()
 		deadline := time.Now().Add(3 * time.Second)
@@ -94,10 +94,16 @@ func TestHeaderPresetChoicesApplyToSelectionAndRespectPlayback(t *testing.T) {
 		t.Fatal("header setting did not apply")
 	}
 	wait(func(jobs []model.Job) bool {
-		return jobs[0].Settings.Media == "DVD-9" && jobs[1].Settings.Standard == "NTSC" && jobs[0].Settings.Profile() == model.ProfileQuality
+		return jobs[0].Settings.Profile() == model.ProfileQuality && jobs[1].Settings.Profile() == model.ProfileQuality
 	})
-	if u.headerEncodingPreset.Selected != "Preset: Archive DVD" {
-		t.Fatal("applied encoding preset is not selected")
+	if u.headerEncoding.Selected != model.ProfileQuality || u.headerEncoding.buttons[1].Importance != widget.HighImportance {
+		t.Fatal("quality button is not highlighted")
+	}
+	if u.snapshot.Jobs[0].Settings.Media != "DVD-5" || u.snapshot.Jobs[1].Settings.Standard != "PAL" {
+		t.Fatal("profile button applied an encoding preset")
+	}
+	if saved, err := u.engine.EncodingPresets(); err != nil || len(saved) != 1 || saved[0] != preset {
+		t.Fatal("disconnected encoding preset was lost", err)
 	}
 	u.headerMenuPreset.SetSelected("Preset: Wide menu")
 	wait(func(jobs []model.Job) bool {
@@ -121,7 +127,7 @@ func TestHeaderPresetChoicesApplyToSelectionAndRespectPlayback(t *testing.T) {
 	if u.headerMedia.Options[0] != "BD-25" || u.headerStandard.Visible() || u.blurayButton.Importance != widget.HighImportance {
 		t.Fatal("Blu-ray choices did not update")
 	}
-	u.headerEncodingPreset.SetSelected("Balanced (x264)")
+	test.Tap(u.headerEncoding.buttons[0])
 	wait(func(jobs []model.Job) bool {
 		return jobs[0].Settings.Profile() == model.ProfileBalanced && jobs[1].Settings.Profile() == model.ProfileBalanced
 	})
@@ -130,7 +136,7 @@ func TestHeaderPresetChoicesApplyToSelectionAndRespectPlayback(t *testing.T) {
 	}
 	u.snapshot.Jobs[0].Locked = true
 	u.refresh()
-	if !u.editOutput.Disabled() || !u.headerEncodingPreset.Disabled() || !u.headerMedia.Disabled() {
+	if !u.editOutput.Disabled() || !u.headerEncoding.Disabled() || !u.headerMedia.Disabled() {
 		t.Fatal("locked selection exposes editable header settings")
 	}
 }

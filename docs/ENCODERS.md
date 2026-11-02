@@ -11,7 +11,8 @@ verified download through Quality setup.
 
 **Balanced is the default for new jobs.** Choose Balanced or Quality directly
 in the job header before processing starts. The choice is saved per job; started
-jobs keep their locked profile. Encoding presets can set defaults for new jobs.
+jobs keep their locked profile. Encoding preset infrastructure is retained internally
+for future custom presets; it has no UI entry point.
 CLI and benchmark accept `-profile Balanced` or `-profile Quality`.
 
 | Profile | Video target / peak | Stereo AC-3 | Intended use |
